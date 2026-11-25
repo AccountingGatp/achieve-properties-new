@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Achieve Weekly GATP Invoice Split</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1d2430;--mute:#667085;--line:#e4e7ec;--accent:#0f5c78;--ok:#12784a;--okbg:#e8f5ee;--warn:#9a5b00;--warnbg:#fff4e0;--err:#b42318;--errbg:#fdecea}
+  @media (prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1c2027;--ink:#e6e8eb;--mute:#98a2b3;--line:#2c323b;--accent:#5bb2d1;--ok:#5fd39a;--okbg:#16301f;--warn:#f0b35a;--warnbg:#33270f;--err:#ff8a80;--errbg:#3a1714}}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--mute);margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .step{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;align-items:center;justify-content:center}
+  .drops{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  @media(max-width:800px){.drops{grid-template-columns:1fr}}
+  .drop{border:1.5px dashed var(--line);border-radius:8px;padding:14px;cursor:pointer;min-height:96px;position:relative}
+  .drop:hover,.drop.over{border-color:var(--accent)}
+  .drop b{display:block;margin-bottom:2px}
+  .drop small{color:var(--mute)}
+  .drop .fn{margin-top:8px;font-size:12px;color:var(--ok);word-break:break-all}
+  .drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mute)}
+  input[type=text],input[type=number]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px 14px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}
+  th{color:var(--mute);font-weight:600;font-size:12px}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tr.tot td{font-weight:600}
+  .scroll{overflow-x:auto}
+  .msg{border-radius:6px;padding:8px 10px;margin:6px 0;font-size:13px}
+  .msg.err{background:var(--errbg);color:var(--err)}.msg.warn{background:var(--warnbg);color:var(--warn)}.msg.ok{background:var(--okbg);color:var(--ok)}
+  details summary{cursor:pointer;color:var(--accent);margin:4px 0}
+  .dl{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:800px){.dl{grid-template-columns:1fr 1fr}}
+  .dl button{text-align:left;padding:12px}
+  .dl button small{display:block;color:var(--mute);font-size:12px;margin-top:2px}
+  .hidden{display:none}
+  .pill{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--okbg);color:var(--ok)}
+  .settings td input{width:100%}
+  .settings td{padding:3px 4px}
+  ol.how{margin:0;padding-left:18px;color:var(--mute)}
+  ol.how li{margin:3px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Achieve Weekly GATP Invoice Split</h1>
+  <p class="sub">Splits the weekly GATP accounting invoice across the properties by units and builds the ResMan bill import and the QuickBooks invoice import for all properties.</p>
+
+  <div class="card">
+    <h2><span class="step">1</span> Enter this week's invoice</h2>
+    <div class="row">
+      <label class="f">Week ending (MM/DD/YYYY)<input type="text" id="w-we" placeholder="08/29/2026"></label>
+      <label class="f">GATP invoice amount<input type="number" step="0.01" id="w-amt"></label>
+      <label class="f">GATP invoice ref<input type="text" id="w-ref" placeholder="WWKPJQMW0018"></label>
+      <label class="f">Invoice & bill date (blank = week ending)<input type="text" id="w-date" placeholder="MM/DD/YYYY"></label>
+      <label class="f">First invoice / bill number<input type="number" id="w-inv"></label>
+      <button class="primary" id="w-run">Split invoice</button>
+    </div>
+    <details style="margin-top:12px"><summary>Properties, units and accounts</summary>
+      <div class="scroll settings" style="margin-top:8px">
+        <table id="propTable"><thead><tr><th>Property code</th><th>ResMan property</th><th>QBO customer</th><th>Units</th><th></th></tr></thead><tbody></tbody></table>
+        <button id="addProp" style="margin-top:6px">+ Add property</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="f">Vendor in ResMan<input type="text" id="c-vendor"></label>
+        <label class="f">ResMan GL<input type="text" id="c-gl"></label>
+        <label class="f">QBO product/service<input type="text" id="c-item"></label>
+        <label class="f">QBO line description<input type="text" id="c-desc"></label>
+        <label class="f">QBO terms<input type="text" id="c-terms"></label>
+      </div>
+      <div class="row" style="margin-top:10px"><button id="saveCfg">Save setup in this browser</button><button id="resetCfg">Reset to defaults</button><span id="cfgMsg" class="sub" style="margin:0"></span></div>
+    </details>
+  </div>
+
+  <div class="card hidden" id="resCard">
+    <h2><span class="step">2</span> Review the split</h2>
+    <div id="w-msgs"></div>
+    <div class="scroll"><table id="w-table"></table></div>
+  </div>
+
+  <div class="card hidden" id="dlCard">
+    <h2><span class="step">3</span> Download and import</h2>
+    <div class="dl" style="grid-template-columns:repeat(3,1fr)">
+      <button data-w="resman"><b>ResMan bill import</b><small>Admin → Import → Type: Invoices (.xlsx)</small></button>
+      <button data-w="qbo"><b>QBO invoice import</b><small>Achieve Properties LLC → each property (.csv)</small></button>
+      <button data-w="split"><b>Split sheet</b><small>Units, rate per unit, amounts (.xlsx)</small></button>
+    </div>
+    <div id="w-dlMsg"></div>
+    <ol class="how" style="margin-top:10px">
+      <li><b>QuickBooks (Achieve Properties LLC):</b> Settings → Import data → Invoices → upload the CSV.</li>
+      <li><b>ResMan:</b> Admin → Import, Type <i>Invoices</i>, Property <i>Achieve Properties LLC</i>, upload the .xlsx.</li>
+      <li>Attach the GATP invoice PDF to one property's ResMan bill (imports can't carry attachments).</li>
+    </ol>
+  </div>
+</div>
+
+<script>// Achieve payroll engine: ADP Labor Distribution Summary + ADP GL (JE) export
+// (+ optional Payroll Register / Labor Distribution Register) -> allocations,
+// ResMan bill import, QBO invoice import, QBO payroll JE import.
+(function (root) {
+  const r2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
+  const num = (v) => {
+    if (v === null || v === undefined || v === "") return 0;
+    if (typeof v === "number") return v;
+    const s = String(v).replace(/[$,\s]/g, "");
+    if (s === "" || s === "-") return 0;
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  };
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const DEFAULT_CONFIG = {
+    vendor: "Achieve Properties LLC",
+    qboItem: "SERVICE FOR PAYROLL",
+    qboTerms: "Due on receipt",
+    nextInvoiceNo: 3487,
+    invoiceDaysBeforePayDate: 1,
+    accountingEmployeeDept: "1000",
+    gmEmployeeName: "Nieto, Veronica",
+    payrollAccount: "Payroll 0859",
+    achieveOperatingAccount: "Achieve Operation 5632",
+    ownerDepositAcctSuffix: "5632",
+    transferLimit: 10000,
+    payrollBuffer: 3000,
+    rubsCostNumber: "RUBS",
+    homeCostNumber: "AP",
+    // order = invoice numbering order
+    properties: [
+      { cost: "GO",   resman: "Greenoak", qboCustomer: "Green Oaks at Medical", rubsUnits: 254, accUnits: 254, weeklyUnits: 254, rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+      { cost: "IST",  resman: "ISWZB",    qboCustomer: "Wurzbach",              rubsUnits: 0,   accUnits: 0,   weeklyUnits: 324,   rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+      { cost: "MILA", resman: "MILANEW",  qboCustomer: "The Mila Apartment",    rubsUnits: 127, accUnits: 127, weeklyUnits: 127, rubsGL: "1370,1370,1370,1370,5230", adpFee: 0 },
+      { cost: "MMA",  resman: "MMA",      qboCustomer: "Morgan Manor",          rubsUnits: 157, accUnits: 157, weeklyUnits: 157, rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+      { cost: "RS",   resman: "RS",       qboCustomer: "Rio Springs",           rubsUnits: 240, accUnits: 240, weeklyUnits: 240, rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+      { cost: "UC",   resman: "UC",       qboCustomer: "University Cove",       rubsUnits: 262, accUnits: 262, weeklyUnits: 262, rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+      { cost: "VAL",  resman: "VAL",      qboCustomer: "Valencia at Medical",   rubsUnits: 346, accUnits: 346, weeklyUnits: 346, rubsGL: "1370,1370,1370,1370,5230", adpFee: 0 },
+      { cost: "SAL",  resman: "SAL",      qboCustomer: "Salado",                rubsUnits: 0,   accUnits: 166, weeklyUnits: 166, rubsGL: "5205,5240,5345,5340,5230", adpFee: 0 },
+    ],
+    rubsLineNames: ["Cleaning", "Painting", "Trash Outs", "Make Ready", "Landscaping"],
+    accountingGL: "6510",
+    weekly: { amount: 1375, gl: "6510", qboDescription: "Accounting team", vendor: "Achieve Properties LLC" },
+    gmGL: "5010",
+    insuranceGL: "5075",
+    taxGL: "5040",
+    commissionGL: "5030",
+    glNames: { "5005": "Executive Payroll", "5010": "Property Manager Payroll", "5020": "Maintenance Payroll", "5021": "Leasing Payroll", "5030": "Commission", "5040": "Payroll Taxes", "5075": "Insurance" },
+    // ADP unmapped lines like [RegularPay...][RS][1011]: dept -> GL
+    deptNames: { "1000": "Accounting", "1005": "Property Manager", "1010": "Leasing", "1011": "Assistant Manager", "1015": "Maintenance", "1016": "Maintenance Supervisor", "1020": "Corporate", "1025": "Executive" },
+    deptToGL: { "1000": "6510", "1005": "5010", "1010": "5021", "1011": "5010", "1015": "5020", "1016": "5020", "1020": "5005", "1025": "5005" },
+    qboJE: {
+      bankAccount: "1079 Payroll Bank account(...0859)",
+      wagesAccount: "65000 Payroll Expenses",
+      commissionAccount: "65500 Payroll - Commission/Bonus",
+      taxAccount: "65600 Payroll - Taxes",
+      deductionsAccount: "63320 Health Insurance",
+      reimbAccount: "65000 Payroll Expenses",
+    },
+  };
+
+  // ---------- parsers (input: array of arrays from SheetJS) ----------
+  function parseSummary(rows) {
+    let header = null, hi = -1, meta = {};
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+      const r = rows[i] || [];
+      const txt = r.filter((c) => c != null).join(" ");
+      const m = txt.match(/Payroll #\s*:\s*(\S+).*Pay Date\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4}).*Period Start Date\s*:\s*(\S+).*Period End Date\s*:\s*(\S+)/);
+      if (m) meta = { payrollNo: m[1], payDate: m[2], periodStart: m[3], periodEnd: m[4] };
+      if (norm(r[0]) === "workedincostnumber") { header = r; hi = i; break; }
+    }
+    if (!header) throw new Error("Labor Distribution Summary: could not find the 'Worked In Cost Number' header row.");
+    const col = {};
+    header.forEach((h, j) => { if (h != null && col[norm(h)] === undefined) col[norm(h)] = j; });
+    const find = (...keys) => {
+      for (const k of keys) { const n = norm(k); if (col[n] !== undefined) return col[n]; }
+      for (const k of keys) { const n = norm(k); const hit = Object.keys(col).find((c) => c.includes(n)); if (hit) return col[hit]; }
+      return -1;
+    };
+    const C = {
+      gross: find("Gross"),
+      eeTax: find("Total Employee Taxes"),
+      vol: find("Total Voluntary Deductions / Withholding Orders", "Total Voluntary Deductions"),
+      erTax: find("Total Employer Taxes"),
+      k401: find("195308 401K - Base"),
+      roth: find("195308 401K - ROTH Base"),
+      commission: find("Commision (Commission) - Earnings", "Commission - Earnings"),
+      reimb: find("Total Reimbursements"),
+    };
+    if (C.gross < 0 || C.vol < 0 || C.erTax < 0) throw new Error("Labor Distribution Summary: missing Gross / Voluntary Deductions / Employer Taxes columns.");
+    // 401k columns: any header containing 401k
+    const k401cols = header.map((h, j) => (h && /401k/i.test(h) ? j : -1)).filter((j) => j >= 0);
+    const lines = [];
+    for (let i = hi + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const name = r[0];
+      if (name == null || String(name).trim() === "") continue;
+      if (/^totals?$/i.test(String(name).trim())) { meta.totalsRow = r; continue; }
+      const code = String(name).split(" - ")[0].trim();
+      const g = (j) => (j >= 0 ? num(r[j]) : 0);
+      const retirement = k401cols.reduce((s, j) => s + num(r[j]), 0);
+      lines.push({
+        cost: code, name: String(name).trim(),
+        gross: r2(g(C.gross)), eeTax: r2(g(C.eeTax)), vol: r2(g(C.vol)), erTax: r2(g(C.erTax)),
+        retirement: r2(retirement), commission: r2(g(C.commission)), reimb: r2(C.reimb >= 0 ? g(C.reimb) : 0),
+      });
+    }
+    return { meta, lines };
+  }
+
+  function parseCSV(text) {
+    const out = []; let row = [], cur = "", q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ",") { row.push(cur); cur = ""; }
+      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cur); out.push(row); row = []; cur = ""; }
+      else cur += ch;
+    }
+    if (cur !== "" || row.length) { row.push(cur); out.push(row); }
+    return out;
+  }
+
+  // ADP GL export in ResMan JE layout
+  function parseADPJE(rows, cfg) {
+    const h = rows[0].map(norm);
+    const ix = (k) => h.indexOf(norm(k));
+    const P = ix("Property Abbreviation"), D = ix("Date"), G = ix("GL Account Number"), DS = ix("Description"), DR = ix("Debit"), CR = ix("Credit"), LD = ix("Line-Item Description");
+    if (P < 0 || G < 0 || DR < 0 || CR < 0) throw new Error("ADP JE CSV: expected columns Property Abbreviation, GL Account Number, Debit, Credit.");
+    const lines = [], warnings = []; var _dept;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || !r[P] || !String(r[P]).trim()) continue;
+      const cost = String(r[P]).trim();
+      let gl = String(r[G] || "").trim();
+      const desc = String(r[DS] || "").trim();
+      let mapped = true, glName = desc;
+      if (gl.startsWith("[")) {
+        const m = desc.match(/\]\[([^\]]+)\]\[([^\]]+)\]\s*$/);
+        const dept = m ? m[2] : "";
+        mapped = false; gl = ""; glName = desc;
+        var _dept = dept;
+      } else if (gl.startsWith("RS19") || /CONTRIBUTION/i.test(desc)) {
+        gl = "401K";
+      }
+      lines.push({ cost, date: r[D], gl, desc, glName, debit: r2(num(r[DR])), credit: r2(num(r[CR])), lineDesc: String(r[LD] || "").trim(), mapped, dept: mapped ? "" : (typeof _dept !== "undefined" ? _dept : "") });
+      _dept = undefined;
+    }
+    return { lines, warnings };
+  }
+
+  // Payroll Register or Labor Distribution Register -> employee gross
+  function parseRegister(rows) {
+    const emps = [];
+    for (const r of rows) {
+      const a = r && r[0];
+      if (typeof a === "string" && /H Dept:/.test(a)) {
+        const name = a.split("\n")[0].trim();
+        const dept = (a.match(/H Dept:\s*(\S+)/) || [])[1] || "";
+        const costN = (a.match(/W Cost Num:\s*(\S+)/) || a.match(/H Cost Num:\s*(\S+)/) || [])[1] || "";
+        emps.push({ name, dept, cost: costN, gross: r2(num(r[5])) });
+      }
+    }
+    return emps;
+  }
+
+  // Labor Distribution Register -> wages by WORKED-IN cost number and home dept (+ commission)
+  function parseLDR(rows) {
+    const out = []; let cur = null;
+    for (const r of rows) {
+      const a = r && r[0];
+      if (a != null && String(a).trim() !== "") {
+        cur = null;
+        if (typeof a === "string" && /W Cost Num:/.test(a)) {
+          cur = {
+            name: a.split("\n")[0].trim(),
+            cost: (a.match(/W Cost Num:\s*(\S+)/) || [])[1] || "",
+            dept: (a.match(/H Dept:\s*(\S+)/) || [])[1] || "",
+            gross: r2(num(r[5])), commission: 0,
+          };
+          out.push(cur);
+        } else continue;
+      }
+      if (cur && r[1] && /commis/i.test(String(r[1]))) cur.commission = r2(cur.commission + num(r[4]));
+    }
+    return out;
+  }
+
+  // Payroll Register -> per-employee net pay and direct-deposit splits
+  function parsePayrollRegister(rows) {
+    const out = []; let cur = null;
+    for (const r of rows) {
+      const a = r && r[0];
+      if (a != null && String(a).trim() !== "") {
+        cur = null;
+        if (typeof a === "string" && /H Dept:/.test(a) && !/W Cost Num:/.test(a)) {
+          cur = { name: a.split("\n")[0].trim(), dept: (a.match(/H Dept:\s*(\S+)/) || [])[1] || "", net: r2(num(r[12])), deposits: [] };
+          out.push(cur);
+        }
+      }
+      if (!cur) continue;
+      const d = r[12];
+      if (typeof d === "string") {
+        const m = d.match(/Acc#\s*(\d+).*\$([\d,]+\.\d{2})/);
+        if (m) cur.deposits.push({ last4: m[1].slice(-4), amount: r2(num(m[2])) });
+      }
+    }
+    return out;
+  }
+
+  // ---------- core ----------
+  function addDays(mdY, days) {
+    const [m, d, y] = mdY.split("/").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + days));
+    return `${String(dt.getUTCMonth() + 1).padStart(2, "0")}/${String(dt.getUTCDate()).padStart(2, "0")}/${dt.getUTCFullYear()}`;
+  }
+
+  function run({ summaryRows, jeRows, registerRows, payrollRegisterRows, cfg, overrides }) {
+    // registerRows may be the Labor Distribution Register (preferred) or the Payroll Register
+    cfg = cfg || DEFAULT_CONFIG; overrides = overrides || {};
+    const S = parseSummary(summaryRows);
+    const J = jeRows && jeRows.length ? parseADPJE(jeRows, cfg) : { lines: [], warnings: [] };
+    const LDR = registerRows ? parseLDR(registerRows) : [];
+    const missingKeys = new Set(J.lines.filter((l) => !l.mapped && l.debit).map((l) => `${l.cost}|${l.dept}`));
+    const deptName = (d) => (cfg.deptNames && cfg.deptNames[d]) || "";
+    const unassigned = [];
+    const useLDR = LDR.length > 0;
+    const warnings = useLDR ? [] : [...J.warnings], errors = [];
+    if (!useLDR && !J.lines.length) throw new Error("Upload the Labor Distribution Register (preferred) or the ADP JE CSV — one is needed to split pay by GL.");
+    if (!useLDR) warnings.push("GL split taken from the ADP JE CSV (home property basis). Upload the Labor Distribution Register for worked-in basis.");
+    const meta = S.meta;
+    if (!meta.payDate) errors.push("Could not read the pay date from the summary header.");
+    const payDate = meta.payDate || "";
+    const invDate = overrides.invoiceDate || (payDate ? addDays(payDate, -(cfg.invoiceDaysBeforePayDate || 0)) : "");
+    const payLabel = payDate.replace(/\//g, ".");
+
+    const sumBy = {}; S.lines.forEach((l) => (sumBy[l.cost] = l));
+    const ownCost = (l) => r2(l.gross - l.vol + l.erTax + l.retirement + l.reimb); // gross + ER tax - insurance deductions + reimbursements
+
+    // pools
+    const rubs = sumBy[cfg.rubsCostNumber];
+    const rubsPool = rubs ? ownCost(rubs) : 0;
+    if (!rubs) warnings.push(`No ${cfg.rubsCostNumber} row in the summary; RUBS allocation is 0.`);
+
+    let accGross = overrides.accountingGross, gmGross = overrides.gmGross, accName = "", gmName = "";
+    if (registerRows && (accGross == null || gmGross == null)) {
+      const emps = parseRegister(registerRows);
+      if (accGross == null) {
+        const acc = emps.filter((e) => e.dept === String(cfg.accountingEmployeeDept));
+        accGross = r2(acc.reduce((s, e) => s + e.gross, 0)); accName = acc.map((e) => e.name).join("; ");
+        if (!acc.length) warnings.push(`No employee in dept ${cfg.accountingEmployeeDept} (Accounting) found in the register.`);
+      }
+      if (gmGross == null) {
+        const gm = emps.filter((e) => norm(e.name).includes(norm(cfg.gmEmployeeName)));
+        gmGross = r2(gm.reduce((s, e) => s + e.gross, 0)); gmName = gm.map((e) => e.name).join("; ");
+        if (!gm.length) warnings.push(`GM employee "${cfg.gmEmployeeName}" not found in the register.`);
+      }
+    }
+    if (accGross == null) { accGross = 0; errors.push("Accounting gross not found: upload the Payroll Register or enter it manually."); }
+    if (gmGross == null) { gmGross = 0; errors.push("GM gross not found: upload the Payroll Register or enter it manually."); }
+
+    const props = cfg.properties;
+    const rubsUnitsTot = props.reduce((s, p) => s + num(p.rubsUnits), 0);
+    const accUnitsTot = props.reduce((s, p) => s + num(p.accUnits), 0);
+
+    // JE grouping per property
+    const jeBy = {};
+    J.lines.forEach((l) => { (jeBy[l.cost] = jeBy[l.cost] || []).push(l); });
+
+    let invNo = Number(overrides.startInvoiceNo || cfg.nextInvoiceNo);
+    const results = [];
+    for (const p of props) {
+      const s = sumBy[p.cost];
+      const je = jeBy[p.cost] || [];
+      if (!s && !je.length && !LDR.some((e) => e.cost === p.cost)) continue; // property not in this payroll
+      const lines = [];
+      const wages = {}; const ownUnassigned = [];
+      const addW = (gl, amt, name) => { wages[gl] = wages[gl] || { amt: 0, name: cfg.glNames[gl] || name || gl }; wages[gl].amt += amt; };
+      if (useLDR) {
+        LDR.filter((e) => e.cost === p.cost).forEach((e) => {
+          const gl = cfg.deptToGL[e.dept];
+          if (e.commission) addW(cfg.commissionGL || "5030", e.commission);
+          const amt = r2(e.gross - e.commission);
+          if (!gl || missingKeys.has(`${p.cost}|${e.dept}`)) {
+            const why = !gl ? `dept ${e.dept} has no GL in the map` : "GL missing in ADP";
+            unassigned.push({ cost: p.cost, resman: p.resman, who: e.name, dept: e.dept, deptName: deptName(e.dept), amount: amt, why });
+            ownUnassigned.push({ gl: "", desc: `UNASSIGNED – ${e.name} (dept ${e.dept}${deptName(e.dept) ? " " + deptName(e.dept) : ""}) – ${why}`, amount: amt, kind: "unassigned" });
+          } else addW(gl, amt);
+        });
+      } else {
+        je.filter((l) => l.debit && l.gl !== cfg.taxGL && l.gl !== "401K").forEach((l) => {
+          if (l.mapped) return addW(l.gl, l.debit, l.glName);
+          unassigned.push({ cost: p.cost, resman: p.resman, who: l.desc, dept: l.dept, deptName: deptName(l.dept), amount: l.debit, why: "GL missing in ADP" });
+          ownUnassigned.push({ gl: "", desc: `UNASSIGNED – ${l.desc} (dept ${l.dept}${deptName(l.dept) ? " " + deptName(l.dept) : ""}) – GL missing in ADP`, amount: l.debit, kind: "unassigned" });
+        });
+      }
+      const wageTotal = r2(Object.values(wages).reduce((s, w) => s + w.amt, 0) + ownUnassigned.reduce((s, u) => s + u.amount, 0));
+      Object.keys(wages).sort().forEach((gl) => lines.push({ gl, desc: wages[gl].name, amount: r2(wages[gl].amt), kind: "own" }));
+      ownUnassigned.forEach((u) => lines.push(u));
+      // employer taxes and insurance deductions come from the summary (worked-in basis)
+      const tax = s ? s.erTax : r2(je.filter((l) => l.gl === cfg.taxGL).reduce((a, l) => a + l.debit - l.credit, 0));
+      if (tax) lines.push({ gl: cfg.taxGL, desc: cfg.glNames[cfg.taxGL], amount: tax, kind: "own" });
+      const ins = s ? r2(s.vol - s.retirement) : r2(je.filter((l) => l.gl === cfg.insuranceGL).reduce((a, l) => a + l.credit - l.debit, 0));
+      if (ins) lines.push({ gl: cfg.insuranceGL, desc: cfg.glNames[cfg.insuranceGL], amount: -ins, kind: "own" });
+      const reimb = s ? s.reimb : 0;
+      if (reimb) lines.push({ gl: cfg.reimbGL || "5010", desc: "Employee reimbursements", amount: reimb, kind: "own" });
+      const own = r2(wageTotal + tax - ins + reimb);
+
+      if (s) {
+        if (Math.abs(wageTotal - s.gross) > 0.005) errors.push(`${p.cost}: wages from the ${useLDR ? "Labor Distribution Register" : "ADP JE"} ${wageTotal.toFixed(2)} ≠ summary gross ${s.gross.toFixed(2)}.`);
+        if (useLDR && je.length) {
+          const jw = r2(je.filter((l) => l.debit && l.gl !== cfg.taxGL && l.gl !== "401K").reduce((a, l) => a + l.debit, 0));
+          if (Math.abs(jw - s.gross) > 0.005) warnings.push(`${p.cost}: ADP JE shows wages ${jw.toFixed(2)} vs ${s.gross.toFixed(2)} worked here — an employee based at another property worked here (or the reverse). Bill uses the worked-in figure.`);
+        }
+      } else warnings.push(`${p.cost}: has pay but is not in the summary.`);
+
+      // allocations
+      const rubsShare = rubsUnitsTot ? rubsPool * num(p.rubsUnits) / rubsUnitsTot : 0;
+      const rubsEach = r2(rubsShare / 5);
+      const rubsGLs = String(p.rubsGL).split(",").map((x) => x.trim());
+      const rubsTotalR = r2(rubsShare);
+      // 5 equal lines; rounding cent(s) go on the first line so the lines add to the rounded share
+      if (rubsEach) cfg.rubsLineNames.forEach((n, i) => lines.push({ gl: rubsGLs[i] || "", desc: n, amount: i === 0 ? r2(rubsTotalR - 4 * rubsEach) : rubsEach, kind: "rubs" }));
+      const accAmt = accUnitsTot ? r2(accGross * num(p.accUnits) / accUnitsTot) : 0;
+      const gmAmt = accUnitsTot ? r2(gmGross * num(p.accUnits) / accUnitsTot) : 0;
+      if (accAmt) lines.push({ gl: cfg.accountingGL, desc: "Accounting", amount: accAmt, kind: "acc" });
+      if (gmAmt) lines.push({ gl: cfg.gmGL, desc: "GM", amount: gmAmt, kind: "gm" });
+      const fee = r2(num(p.adpFee));
+      if (fee) lines.push({ gl: "6510", desc: "ADP Fee", amount: fee, kind: "fee" });
+      const rubsTotal = rubsEach ? rubsTotalR : 0;
+      const total = r2(lines.reduce((s, l) => s + l.amount, 0));
+      results.push({ p, invoiceNo: String(invNo++), own, rubsShare: r2(rubsShare), rubsTotal, accAmt, gmAmt, fee, total, lines, summary: s || null });
+    }
+    // properties in summary not configured
+    S.lines.forEach((l) => {
+      if (l.cost === cfg.rubsCostNumber || l.cost === cfg.homeCostNumber) return;
+      if (!props.find((p) => p.cost === l.cost)) errors.push(`${l.cost} (${l.name}) is in the summary but not in the property settings — it would not be billed.`);
+    });
+
+    const known = new Set([cfg.rubsCostNumber, cfg.homeCostNumber, ...props.map((p) => p.cost)]);
+    new Set([...LDR.map((e) => e.cost), ...J.lines.map((l) => l.cost)]).forEach((c) => { if (c && !known.has(c)) errors.push(`Cost number ${c} has pay but is not set up as a property.`); });
+
+    // QBO payroll JE (Achieve Properties LLC)
+    const tot = S.lines.reduce((a, l) => ({ gross: a.gross + l.gross, eeTax: a.eeTax + l.eeTax, vol: a.vol + l.vol, erTax: a.erTax + l.erTax, comm: a.comm + l.commission, reimb: a.reimb + l.reimb }), { gross: 0, eeTax: 0, vol: 0, erTax: 0, comm: 0, reimb: 0 });
+    Object.keys(tot).forEach((k) => (tot[k] = r2(tot[k])));
+    const net = r2(tot.gross - tot.eeTax - tot.vol + tot.reimb);
+    const q = cfg.qboJE;
+    const je = [
+      { account: q.wagesAccount, debit: r2(tot.gross - tot.comm), credit: 0, desc: "Payroll Expenses" },
+      ...(tot.comm ? [{ account: q.commissionAccount, debit: tot.comm, credit: 0, desc: "Commission/Bonus" }] : []),
+      { account: q.taxAccount, debit: tot.erTax, credit: 0, desc: "Payroll Taxes" },
+      ...(tot.reimb ? [{ account: q.reimbAccount || q.wagesAccount, debit: tot.reimb, credit: 0, desc: "Employee reimbursements" }] : []),
+      { account: q.bankAccount, debit: 0, credit: net, desc: "Payroll Net Pay" },
+      { account: q.bankAccount, debit: 0, credit: r2(tot.eeTax + tot.erTax), desc: "Accrued Taxes" },
+      { account: q.deductionsAccount, debit: 0, credit: tot.vol, desc: "Employee deductions" },
+    ];
+    const jeDr = r2(je.reduce((s, l) => s + l.debit, 0)), jeCr = r2(je.reduce((s, l) => s + l.credit, 0));
+    if (Math.abs(jeDr - jeCr) > 0.005) errors.push(`QBO payroll JE does not balance: Dr ${jeDr} Cr ${jeCr}.`);
+
+    // allocation check: everything allocated
+    const rubsAlloc = r2(results.reduce((s, r) => s + r.rubsTotal, 0));
+    const accAlloc = r2(results.reduce((s, r) => s + r.accAmt, 0));
+    const gmAlloc = r2(results.reduce((s, r) => s + r.gmAmt, 0));
+    // ---- funding: what each account moves into the payroll account ----
+    const apS = sumBy[cfg.homeCostNumber];
+    const apDue = apS ? r2(ownCost(apS) - accAlloc - gmAlloc) : 0;
+    const funding = results.map((res) => ({ from: `${res.p.resman} Operating`, to: cfg.payrollAccount, amount: res.total, invoiceNo: res.invoiceNo, who: res.p.qboCustomer, cost: res.p.cost }));
+    funding.push({ from: cfg.achieveOperatingAccount, to: cfg.payrollAccount, amount: apDue, invoiceNo: "", who: "Achieve Properties (own payroll)", cost: cfg.homeCostNumber });
+    const fundTotal = r2(funding.reduce((a, f) => a + f.amount, 0));
+    const retTot = r2(S.lines.reduce((a, l) => a + l.retirement, 0));
+    const adpCash = r2(net + tot.eeTax + tot.erTax + retTot); // net pay (incl. reimbursements) + all taxes + 401k
+    if (Math.abs(fundTotal - adpCash) > 0.05) warnings.push(`Transfers total ${fundTotal.toFixed(2)} vs ADP cash pull ${adpCash.toFixed(2)} (net pay + taxes + 401k). Check before funding.`);
+    funding.forEach((f) => { f.overLimit = f.amount > Number(cfg.transferLimit || 0) && Number(cfg.transferLimit) > 0; });
+
+    // ---- owner contributions: net pay deposited back into Achieve's own account ----
+    let ownerDeposits = [];
+    if (payrollRegisterRows) {
+      const pr = parsePayrollRegister(payrollRegisterRows);
+      pr.forEach((e) => e.deposits.filter((d) => d.last4 === String(cfg.ownerDepositAcctSuffix)).forEach((d) => ownerDeposits.push({ name: e.name, amount: d.amount })));
+    }
+
+    if (unassigned.length) warnings.push(`${unassigned.length} pay line(s) have no GL and are on the bills as UNASSIGNED with a blank GL (${r2(unassigned.reduce((a, u) => a + u.amount, 0)).toFixed(2)}). Fill the GL in the ResMan file (or fix the employee's GL in ADP) before importing — ResMan rejects a line with no GL.`);
+    return {
+      unassigned,
+      funding, fundTotal, adpCash, ownerDeposits,
+      meta: { ...meta, invoiceDate: invDate, payLabel }, cfg, results, warnings, errors,
+      pools: { rubsPool, rubsAlloc, accGross, accAlloc, gmGross, gmAlloc, accName, gmName, rubsUnitsTot, accUnitsTot },
+      summary: S.lines, totals: { ...tot, net }, qboJE: je, jeDr, jeCr,
+    };
+  }
+
+  // ---------- weekly GATP accounting invoice split ----------
+  function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+  function weekly({ weekEnding, amount, invoiceDate, startInvoiceNo, ref, cfg }) {
+    cfg = cfg || DEFAULT_CONFIG;
+    const W = cfg.weekly || DEFAULT_CONFIG.weekly;
+    const errors = [];
+    if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(weekEnding || "")) errors.push("Enter the week-ending date as MM/DD/YYYY.");
+    amount = r2(num(amount));
+    if (!(amount > 0)) errors.push("Enter the GATP invoice amount.");
+    const props = cfg.properties.filter((p) => num(p.weeklyUnits) > 0);
+    const units = props.reduce((a, p) => a + num(p.weeklyUnits), 0);
+    if (!units) errors.push("No property has weekly units set.");
+    if (errors.length) return { errors, results: [] };
+    const [m, d, y] = weekEnding.split("/").map(Number);
+    const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1];
+    const desc = `Invoice for Week Ending ${ordinal(d)} ${mon}.`;
+    const invDate = invoiceDate || weekEnding;
+    // split by units; rounding cents go to the property with the most units so the split adds to the invoice exactly
+    let rows = props.map((p) => ({ p, units: num(p.weeklyUnits), amount: r2(amount * num(p.weeklyUnits) / units) }));
+    const diff = r2(amount - rows.reduce((a, r) => a + r.amount, 0));
+    if (diff) { const big = rows.reduce((a, r) => (r.units > a.units ? r : a)); big.amount = r2(big.amount + diff); big.rounding = diff; }
+    let no = Number(startInvoiceNo || 0);
+    rows.forEach((r) => (r.invoiceNo = no ? String(no++) : ""));
+    return { errors: [], weekEnding, invoiceDate: invDate, amount, units, desc, ref: (ref || "").trim(), results: rows, cfg, W };
+  }
+  function weeklyResman(WR) {
+    const out = [RESMAN_HEADERS];
+    WR.results.forEach((r) => out.push([r.invoiceNo, "Bill", WR.invoiceDate, WR.invoiceDate, WR.W.vendor, WR.desc, 1, r.p.resman, "", WR.W.gl, WR.ref ? `${WR.desc} GATP ${WR.ref}` : WR.desc, r.amount, "", "False", "", WR.ref, "", "", WR.invoiceDate, 1, r.amount, "", WR.invoiceDate, ""]));
+    return out;
+  }
+  function weeklyQBO(WR) {
+    const out = [["InvoiceNo", "Customer", "InvoiceDate", "DueDate", "Terms", "Memo", "Item(Product/Service)", "ItemDescription", "ItemQuantity", "ItemRate", "ItemAmount", "Service Date"]];
+    WR.results.forEach((r) => out.push([r.invoiceNo, r.p.qboCustomer, WR.invoiceDate, WR.invoiceDate, WR.cfg.qboTerms, WR.ref ? `${WR.desc} GATP ${WR.ref}` : WR.desc, WR.cfg.qboItem, WR.W.qboDescription, 1, r.amount, r.amount, WR.weekEnding]));
+    return out;
+  }
+
+  // ---------- outputs (arrays of arrays) ----------
+  const RESMAN_HEADERS = ["Invoice Number", "Bill or Credit", "Invoice Date", "Accounting Date", "Vendor", "Invoice Description", "Line Item Number", "Property Abbreviation", "Location", "GL Account", "Line Item Description", "Amount", "Expense Type", "Is Replacement Reserve", "Payment Date", "Reference Number", "Payment Method", "Department", "Due Date", "Quantity", "Unit Price", "Tax", "Received Date", "Document Url"];
+  function resmanImport(R) {
+    const out = [RESMAN_HEADERS];
+    R.results.forEach((res) => {
+      res.lines.forEach((l, i) => {
+        out.push([res.invoiceNo, "Bill", R.meta.invoiceDate, R.meta.invoiceDate, R.cfg.vendor, `Payroll ${R.meta.payLabel}`, i + 1, res.p.resman, "", l.gl, l.desc, l.amount, "", "False", "", "", "", "", R.meta.invoiceDate, 1, l.amount, "", R.meta.invoiceDate, ""]);
+      });
+    });
+    return out;
+  }
+  function qboInvoiceImport(R) {
+    const out = [["InvoiceNo", "Customer", "InvoiceDate", "DueDate", "Terms", "Memo", "Item(Product/Service)", "ItemDescription", "ItemQuantity", "ItemRate", "ItemAmount", "Service Date"]];
+    R.results.forEach((res) => {
+      const ls = [["gross", res.own], ["RUBS", res.rubsTotal], ["Accounting", res.accAmt], ["GM", res.gmAmt], ["ADP FEE", res.fee]];
+      ls.filter(([d, a], i) => i === 0 || a).forEach(([d, a]) => out.push([res.invoiceNo, res.p.qboCustomer, R.meta.invoiceDate, R.meta.invoiceDate, R.cfg.qboTerms, `Payroll ${R.meta.payLabel}`, R.cfg.qboItem, d, 1, a, a, R.meta.payDate]));
+    });
+    return out;
+  }
+  function qboJEImport(R) {
+    const out = [["*JournalNo", "*JournalDate", "*AccountName", "*Debits", "*Credits", "Description", "Name", "Currency", "Location", "Class"]];
+    R.qboJE.forEach((l, i) => out.push([`PR ${R.meta.payrollNo}`, i === 0 ? R.meta.payDate : "", l.account, l.debit || "", l.credit || "", l.desc, "", "", "", ""]));
+    return out;
+  }
+
+  const api = { DEFAULT_CONFIG, run, parseLDR, weekly, weeklyResman, weeklyQBO, resmanImport, qboInvoiceImport, qboJEImport, parseCSV, parseSummary, parseRegister, r2 };
+  if (typeof module !== "undefined") module.exports = api; else root.PayrollEngine = api;
+})(this);
+</script>
+<script>
+(function(){
+  const E = window.PayrollEngine;
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const toCSV = (aoa) => aoa.map((r) => r.map((v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\r\n") + "\r\n";
+  const defaults = () => {
+    const d = E.DEFAULT_CONFIG;
+    return { qboItem: d.qboItem, qboTerms: d.qboTerms, weekly: Object.assign({}, d.weekly), properties: d.properties.map((p) => ({ cost: p.cost, resman: p.resman, qboCustomer: p.qboCustomer, weeklyUnits: p.weeklyUnits })) };
+  };
+  let cfg = defaults();
+  try { const s = localStorage.getItem("achieveGatpCfg"); if (s) cfg = Object.assign(cfg, JSON.parse(s)); } catch (e) {}
+
+  function renderCfg() {
+    const tb = $("propTable").querySelector("tbody"); tb.innerHTML = "";
+    cfg.properties.forEach((p, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = ["cost", "resman", "qboCustomer", "weeklyUnits"].map((k) => `<td><input type="text" data-i="${i}" data-k="${k}" value="${esc(p[k])}"></td>`).join("") + `<td><button data-del="${i}" title="Remove">✕</button></td>`;
+      tb.appendChild(tr);
+    });
+    $("c-vendor").value = cfg.weekly.vendor; $("c-gl").value = cfg.weekly.gl; $("c-item").value = cfg.qboItem; $("c-desc").value = cfg.weekly.qboDescription; $("c-terms").value = cfg.qboTerms;
+    if (!$("w-amt").value) $("w-amt").value = cfg.weekly.amount;
+  }
+  function readCfg() {
+    document.querySelectorAll("#propTable input").forEach((inp) => { const p = cfg.properties[+inp.dataset.i], k = inp.dataset.k; p[k] = k === "weeklyUnits" ? Number(inp.value || 0) : inp.value.trim(); });
+    cfg.weekly.vendor = $("c-vendor").value.trim(); cfg.weekly.gl = $("c-gl").value.trim(); cfg.qboItem = $("c-item").value.trim(); cfg.weekly.qboDescription = $("c-desc").value.trim(); cfg.qboTerms = $("c-terms").value.trim();
+    cfg.weekly.amount = Number($("w-amt").value || cfg.weekly.amount);
+  }
+  $("propTable").addEventListener("click", (e) => { const d = e.target.dataset.del; if (d != null) { readCfg(); cfg.properties.splice(+d, 1); renderCfg(); } });
+  $("addProp").onclick = () => { readCfg(); cfg.properties.push({ cost: "", resman: "", qboCustomer: "", weeklyUnits: 0 }); renderCfg(); };
+  $("saveCfg").onclick = () => { readCfg(); try { localStorage.setItem("achieveGatpCfg", JSON.stringify(cfg)); $("cfgMsg").textContent = "Saved in this browser."; } catch (e) { $("cfgMsg").textContent = "This browser would not save it; settings apply to this session only."; } };
+  $("resetCfg").onclick = () => { cfg = defaults(); try { localStorage.removeItem("achieveGatpCfg"); } catch (e) {} renderCfg(); $("cfgMsg").textContent = "Defaults restored."; };
+  renderCfg();
+
+  let W = null;
+  $("w-run").onclick = () => {
+    readCfg();
+    W = E.weekly({ weekEnding: $("w-we").value.trim(), amount: $("w-amt").value, invoiceDate: $("w-date").value.trim() || null, startInvoiceNo: $("w-inv").value, ref: $("w-ref").value, cfg });
+    $("resCard").classList.remove("hidden");
+    if (W.errors.length) { $("w-msgs").innerHTML = W.errors.map((e) => `<div class="msg err">${esc(e)}</div>`).join(""); $("w-table").innerHTML = ""; $("dlCard").classList.add("hidden"); return; }
+    const tot = W.results.reduce((a, r) => a + r.amount, 0);
+    $("w-msgs").innerHTML = `<div class="msg ok">${esc(W.desc)}${W.ref ? " · GATP " + esc(W.ref) : ""} · ${fmt(W.amount)} split over ${W.units} units (${(W.amount / W.units).toFixed(9)} per unit) · split total ${fmt(tot)}</div>` +
+      (!$("w-inv").value ? `<div class="msg warn">Enter the first invoice number (QuickBooks' next invoice #) so each ResMan bill and QBO invoice share a number — ResMan needs an invoice number on every bill.</div>` : "");
+    let t = `<thead><tr><th>Invoice #</th><th>Property</th><th>ResMan</th><th class="n">Units</th><th class="n">Share</th><th class="n">Amount</th></tr></thead><tbody>`;
+    W.results.forEach((r) => (t += `<tr><td>${esc(r.invoiceNo)}</td><td>${esc(r.p.qboCustomer)}</td><td>${esc(r.p.resman)}</td><td class="n">${r.units}</td><td class="n">${(100 * r.units / W.units).toFixed(2)}%</td><td class="n">${fmt(r.amount)}${r.rounding ? ` <span class="sub" style="margin:0">(incl. ${r.rounding > 0 ? "+" : ""}${r.rounding.toFixed(2)} rounding)</span>` : ""}</td></tr>`));
+    t += `<tr class="tot"><td></td><td>Total</td><td></td><td class="n">${W.units}</td><td class="n">100%</td><td class="n">${fmt(tot)}</td></tr></tbody>`;
+    $("w-table").innerHTML = t; $("dlCard").classList.remove("hidden"); $("w-dlMsg").innerHTML = "";
+  };
+
+  let downloads = null;
+  if (window.claude && window.claude.use) window.claude.use("downloads").then((d) => { downloads = d; }).catch(() => {});
+  async function saveFile(filename, data) {
+    const msg = $("w-dlMsg");
+    if (downloads) {
+      try { await downloads.save({ filename, data }); msg.innerHTML = `<div class="msg ok">Saved ${esc(filename)}.</div>`; }
+      catch (e) { if (e && e.code !== "declined") msg.innerHTML = `<div class="msg warn">Could not save (${esc(e.code || e)}).</div>`; }
+      return;
+    }
+    try {
+      const blob = data instanceof Blob ? data : new Blob([data], { type: "text/csv" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      msg.innerHTML = `<div class="msg ok">Downloaded ${esc(filename)}.</div>`;
+    } catch (e) { msg.innerHTML = `<div class="msg warn">This browser blocked the download.</div>`; }
+  }
+  const xlsxBlob = (aoa, name) => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name); return new Blob([XLSX.write(wb, { bookType: "xlsx", type: "array" })]); };
+  document.querySelectorAll("#dlCard .dl button").forEach((b) => b.addEventListener("click", async () => {
+    if (!W || W.errors.length) return;
+    const tag = W.weekEnding.replace(/\//g, "-");
+    if (b.dataset.w === "resman") await saveFile(`ResMan GATP Bills WE ${tag}.xlsx`, xlsxBlob(E.weeklyResman(W), "Sheet 1"));
+    if (b.dataset.w === "qbo") await saveFile(`QBO GATP Invoices WE ${tag}.csv`, toCSV(E.weeklyQBO(W)));
+    if (b.dataset.w === "split") {
+      const rate = W.amount / W.units;
+      const aoa = [[`Invoice Due - ${W.desc}${W.ref ? " - " + W.ref : ""}`], [], ["Property", "Units", "Rate per unit", "Amount", "Invoice #"]];
+      W.results.forEach((r) => aoa.push([r.p.qboCustomer, r.units, rate, r.amount, r.invoiceNo]));
+      aoa.push([], ["TOTAL", W.units, "", Math.round(W.results.reduce((a, r) => a + r.amount, 0) * 100) / 100], [], ["INVOICE TO BE DIVIDED", W.amount]);
+      await saveFile(`GATP Split WE ${tag}.xlsx`, xlsxBlob(aoa, "Split"));
+    }
+  }));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1513 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ramp Import Builder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one narrow workbench column. Drop zone on top, one card per property batch below.
+   Each card reads top to bottom: setup, balance check, coding, flagged, download. */
+:root{
+  --bg:#EEF1EF; --surface:#FFFFFF; --ink:#14201C; --muted:#5A6B65; --line:#D5DCD8;
+  --accent:#0E6A5C; --accent-ink:#FFFFFF; --soft:#E3EFEC;
+  --warn:#8A5200; --warn-bg:#FBF0DC; --bad:#A3301F; --bad-bg:#FBE6E1; --ok:#1B6B3A; --ok-bg:#E0F1E6;
+  --font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1513; --surface:#172120; --ink:#E3ECE8; --muted:#8FA39B; --line:#2A3A35;
+  --accent:#4CC2AC; --accent-ink:#07201B; --soft:#1B2E2A;
+  --warn:#E7B25A; --warn-bg:#33270F; --bad:#F0897A; --bad-bg:#3A1A15; --ok:#6FD18F; --ok-bg:#14301E; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1513; --surface:#172120; --ink:#E3ECE8; --muted:#8FA39B; --line:#2A3A35;
+  --accent:#4CC2AC; --accent-ink:#07201B; --soft:#1B2E2A;
+  --warn:#E7B25A; --warn-bg:#33270F; --bad:#F0897A; --bad-bg:#3A1A15; --ok:#6FD18F; --ok-bg:#14301E; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--font);margin:0;
+  padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-size:24px;line-height:1.2;margin:0;font-weight:600;letter-spacing:-.01em}
+h2{font-size:17px;margin:0;font-weight:600;text-wrap:balance}
+h3{font-size:12px;margin:0 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+p{margin:0}
+.sub{color:var(--muted);margin-top:4px}
+.mono,td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.drop{display:flex;flex-direction:column;align-items:flex-start;gap:10px;border:1.5px dashed var(--line);background:var(--surface);border-radius:10px;padding:20px;transition:border-color .15s,background .15s}
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:10px}
+.drop.over{border-color:var(--accent);background:var(--soft)}
+.drop strong{font-size:15px}
+.drop .hint{color:var(--muted);max-width:68ch}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 14px;border-radius:6px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.link{border:0;background:none;color:var(--accent);padding:7px 4px;text-decoration:underline;text-underline-offset:3px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.rules{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:12.5px;padding:0;margin:0;list-style:none}
+.rules li::before{content:"✓ ";color:var(--accent)}
+
+.bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.chips{display:flex;gap:6px 22px;flex-wrap:wrap}
+.chip b{font-family:var(--mono);font-weight:500;font-size:16px;margin-right:6px}
+.chip span{color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.card-h{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.addr{font-size:13.5px;margin-top:2px}
+.src{color:var(--muted);font-size:12.5px;margin-top:2px;overflow-wrap:anywhere}
+.pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+label.f select,label.f input,.gl{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 9px;color:var(--ink);min-width:0;width:100%}
+.fix{font-family:var(--mono);font-size:13px;background:var(--soft);border-radius:6px;padding:7px 9px;color:var(--ink);overflow-wrap:anywhere}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:0}
+.stats div{background:var(--bg);border-radius:8px;padding:10px 12px;min-width:0}
+.stats dt{font-size:12px;color:var(--muted)}
+.stats dd{margin:2px 0 0;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;font-weight:500;overflow-wrap:anywhere}
+.note{font-size:13px;padding:9px 12px;border-radius:8px;background:var(--soft)}
+.note.warn{background:var(--warn-bg);color:var(--warn)}
+.note.bad{background:var(--bad-bg);color:var(--bad)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--bg);position:sticky;top:0}
+td.n,th.n{text-align:right}
+tr:last-child td{border-bottom:0}
+td.wrap{white-space:normal;min-width:180px}
+.gl{width:120px;font-family:var(--mono)}
+td.nogl{color:var(--bad);font-weight:500}
+.sop{font-size:14px;line-height:1.55;max-width:820px}
+.sop h1{font-size:17px;margin:20px 0 6px}.sop h2{font-size:15px;margin:16px 0 4px}.sop h3{font-size:14px;margin:12px 0 4px}
+.sop p{margin:6px 0}.sop ul,.sop ol{margin:6px 0 6px 20px;padding:0}.sop table{margin:8px 0;display:block;overflow-x:auto}
+.sop td,.sop th{white-space:normal;vertical-align:top}
+.sop th{text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);position:static}.sop td,.sop th{border:1px solid var(--line);padding:6px 10px}.sop pre,.sop code{font-family:var(--mono);font-size:12.5px;white-space:pre-wrap}
+.sop-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 18px;margin-bottom:12px}
+.gl.empty{border-color:var(--warn)}
+details>summary{cursor:pointer;color:var(--accent);font-weight:500;padding:2px 0}
+.scroll{max-height:340px;overflow:auto}
+.foot{display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);padding-top:14px}
+.foot .names{font-family:var(--mono);font-size:12px;color:var(--muted);flex:1 1 260px;min-width:0;overflow-wrap:anywhere}
+.empty-state{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:22px;color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;max-width:90vw;z-index:20}
+.sheet textarea{width:100%;min-height:90px;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px;font-family:var(--mono);font-size:12.5px}
+.ex{font-size:12px;color:var(--muted)}
+tr.miss td{background:var(--warn-bg)}
+tr.b-open td{background:var(--warn-bg)}tr.b-billed td{background:var(--soft)}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px}.chk input{width:auto}
+.apbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 18px;margin-top:12px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:10px;flex-wrap:wrap}
+.tab{border:0;background:none;padding:9px 14px;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;color:var(--muted);border-radius:0}
+.tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .cnt{font-family:var(--mono);font-size:12px;margin-left:6px;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--muted)}
+.tab .cnt.warn{background:var(--warn-bg);color:var(--warn)}
+.pick{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.pick select{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 9px;color:var(--ink);min-width:260px;max-width:100%}
+td.missgl{background:var(--bad-bg)!important;color:var(--bad);font-weight:600}
+td.st{font-weight:600}
+tr.miss td.st{color:var(--bad)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:0 0 8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+
+<div class="wrap">
+  <header>
+    <h1>Ramp Import Builder</h1>
+    <p class="sub">Turns a Ramp credit card statement into the two-line ResMan import sheet from the Ramp CC Import SOP.</p>
+  </header>
+
+  <div class="drops">
+    <section class="drop" id="drop">
+      <strong>1. Ramp statements</strong>
+      <p class="hint">The Ramp CSV the SOP asks for, or the PDF statements. A CSV carries the Accounting Category Code. A PDF does not, so you code each merchant on screen.</p>
+      <div class="row">
+        <button class="btn primary" id="pick" type="button">Choose Ramp files</button>
+        <button class="btn link" id="example" type="button">Load an example CSV</button>
+        <button class="btn link" id="clear" type="button" hidden>Clear all</button>
+      </div>
+      <input id="file" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple hidden>
+      <p class="ex" id="statR">No Ramp statements yet</p>
+    </section>
+    <section class="drop" id="dropA">
+      <strong>2. AP Aging Detail</strong>
+      <p class="hint">The ResMan AP Aging Detail report for each property (.xlsx, or one .zip of them). Open bills are checked against your Ramp payments.</p>
+      <div class="row"><button class="btn primary" id="pickA" type="button">Choose AP Aging files</button></div>
+      <input id="fileA" type="file" accept=".xlsx,.zip" multiple hidden>
+      <p class="ex" id="statA">Not added yet</p>
+    </section>
+    <section class="drop" id="dropB">
+      <strong>3. Invoice Detail</strong>
+      <p class="hint">The ResMan Invoice Detail report for each property (.xlsx, or one .zip of them). It shows bills already entered, including paid ones.</p>
+      <div class="row"><button class="btn primary" id="pickB" type="button">Choose Invoice Detail files</button></div>
+      <input id="fileB" type="file" accept=".xlsx,.zip" multiple hidden>
+      <p class="ex" id="statB">Not added yet</p>
+    </section>
+    <section class="drop" id="dropG">
+      <strong>4. General Ledger</strong>
+      <p class="hint">The ResMan General Ledger for the property (.xlsx). The app learns which GL each vendor is usually coded to and fills the blank ones.</p>
+      <div class="row"><button class="btn primary" id="pickG" type="button">Choose General Ledger files</button></div>
+      <input id="fileG" type="file" accept=".xlsx,.zip" multiple hidden>
+      <p class="ex" id="statG">Not added yet</p>
+    </section>
+  </div>
+  <ul class="rules">
+    <li>Only Type = Transaction</li><li>Blank code goes to the flagged file</li><li>Debit expense, credit property CC GL</li><li>Total debit must equal total credit</li><li>Open bill: close it, do not import</li>
+  </ul>
+
+  <details class="sheet" id="settings">
+    <summary>Settings and saved GL codes</summary>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:12px">
+      <label class="f" style="max-width:260px">Date format in the import file
+        <select id="datefmt"><option value="mdy">MM/DD/YYYY</option><option value="iso">YYYY-MM-DD</option></select>
+      </label>
+      <div>
+        <h3>Paste GL codes for merchants</h3>
+        <textarea id="paste" placeholder="One per line, merchant then GL, separated by a tab or a comma&#10;The Home Depot, 6340-0"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn" id="applypaste" type="button">Save these codes</button><span class="ex" id="savedcount"></span></div>
+      </div>
+      <div>
+        <h3>Card payments</h3>
+        <label class="chk"><input type="checkbox" id="incpay" checked> Include Ramp card payments (Transfer rows from the bank)</label>
+        <p class="ex" style="margin-top:6px">Each payment becomes a two-line entry: debit the property CC payable GL, credit the property operating GL. The SOP leaves these out.</p>
+      </div>
+      <div>
+        <h3>Accounting basis in the import file</h3>
+        <select id="basis"><option value="Both">Both (worked in the May file)</option><option value="Accrual">Accrual</option><option value="Cash">Cash</option></select>
+        <label style="margin-left:12px">Import layout <select id="layout"><option value="legacy">10 columns (as in the May file that imported)</option><option value="template">8-column ResMan template (one date per file)</option></select></label>
+        <label style="margin-left:12px">ResMan property names <input type="text" id="codes" value="GO=Greenoak" placeholder="GO=Greenoak, IS=..." style="width:220px"></label>
+        <label style="margin-left:12px">Posting date (8-column layout only) <input type="text" id="postdate" placeholder="MM/DD/YYYY - blank = month end" style="width:170px"></label>
+        <p class="ex" style="margin-top:6px">ResMan's Journal Entries template lists Cash and Accrual. If ResMan rejects "Both", choose Accrual.</p>
+      </div>
+      <div>
+        <h3>Chart of accounts lookup</h3>
+        <input id="coaq" type="search" placeholder="Type a GL number or a name, e.g. 5436 or repairs" autocomplete="off" style="width:100%;max-width:420px">
+        <div class="tw scroll" style="margin-top:8px"><table id="coat"></table></div>
+        <p class="ex" style="margin-top:6px">From the Achieve Properties Chart of Accounts printed 11/4/2026. The app checks every GL code against it.</p>
+      </div>
+      <div>
+        <h3>Property reference (SOP codes, addresses from the Ramp statements)</h3>
+        <div class="tw"><table id="proptable"></table></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="sop-box" id="sopbox"><summary>SOP: Ramp CC Import into ResMan</summary><div class="sop"><p><strong>SOP: Ramp CC Import into ResMan</strong></p>
+<p>Achieve Properties | Monthly Bank Reconciliation Workflow</p>
+<h1 id="purpose-scope">1. Purpose &amp; Scope</h1>
+<p>This SOP covers the complete end-to-end process for posting Ramp credit card transactions into ResMan — from generating the import sheet using Claude, to uploading and posting the journal entry in ResMan. This process runs monthly for each property entity.</p>
+<p><strong>This SOP covers two phases:</strong></p>
+<ul>
+<li>
+<p>Phase A — Generate the import CSV using Claude</p>
+</li>
+<li>
+<p>Phase B — Import and post the journal entry in ResMan</p>
+</li>
+</ul>
+<h1 id="process-overview">2. Process Overview</h1>
+<p>Each Ramp CC transaction is recorded in ResMan as a two-line journal entry:</p>
+<table>
+
+<thead>
+<tr class="header">
+<th><strong>Line</strong></th>
+<th><strong>Entry Type</strong></th>
+<th><strong>GL Side</strong></th>
+<th><strong>GL Account</strong></th>
+</tr>
+<tr class="odd">
+<th><strong>Line 1</strong></th>
+<th>Expense (the purchase)</th>
+<th><strong>DEBIT</strong></th>
+<th>Accounting Category Code from Ramp</th>
+</tr>
+<tr class="header">
+<th><strong>Line 2</strong></th>
+<th>CC Payable (amount owed on card)</th>
+<th><strong>CREDIT</strong></th>
+<th>Property CC GL (e.g. 1050-1 for Rio Springs)</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+
+<p><strong>NOTE:</strong> Every transaction must have both lines — one debit and one matching credit — so the journal is balanced before posting.</p>
+
+<h1 id="property-gl-reference">3. Property &amp; GL Reference</h1>
+<p>Use this table to confirm Property Abbreviation and CC Payable GL for each entity:</p>
+<table>
+
+<thead>
+<tr class="header">
+<th><strong>Ramp Location</strong></th>
+<th><strong>Prop. Abbr.</strong></th>
+<th><strong>CC Payable GL</strong></th>
+<th><strong>Entity / Property</strong></th>
+</tr>
+<tr class="odd">
+<th><strong>Rio Springs</strong></th>
+<th><strong>RI</strong></th>
+<th><strong>1050-1</strong></th>
+<th>Rio Springs Apts</th>
+</tr>
+<tr class="header">
+<th><strong>Morgan Manor</strong></th>
+<th><strong>MM</strong></th>
+<th><strong>1075-1</strong></th>
+<th>Morgan Manor Apts</th>
+</tr>
+<tr class="odd">
+<th><strong>Salado Creek</strong></th>
+<th><strong>SA</strong></th>
+<th><strong>1071-1</strong></th>
+<th>Salado Creek / 2383 I-410</th>
+</tr>
+<tr class="header">
+<th><strong>Istana</strong></th>
+<th><strong>IS</strong></th>
+<th><strong>1092-1</strong></th>
+<th>Istana at Wurzbach</th>
+</tr>
+<tr class="odd">
+<th><strong>Green Oaks</strong></th>
+<th><strong>GO</strong></th>
+<th><strong>1086-1</strong></th>
+<th>Green Oaks at Medical</th>
+</tr>
+<tr class="header">
+<th><strong>University Cove</strong></th>
+<th><strong>UC</strong></th>
+<th><strong>1066-5</strong></th>
+<th>University Cove Apts</th>
+</tr>
+<tr class="odd">
+<th><strong>Mila</strong></th>
+<th><strong>ML</strong></th>
+<th><strong>1044-1</strong></th>
+<th>Mila Apartments</th>
+</tr>
+<tr class="header">
+<th><strong>Valencia</strong></th>
+<th><strong>VA</strong></th>
+<th><strong>1060-4</strong></th>
+<th>Valencia at Medical</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<p><strong>PHASE A — Generate the Import CSV (using Claude)</strong></p>
+<h1 id="prerequisites-before-you-start">4. Prerequisites — Before You Start</h1>
+<ul>
+<li>
+<p>Download the Ramp CC statement CSV for the billing period you need to import</p>
+</li>
+<li>
+<p>Confirm all transactions in Ramp are coded (Accounting Category Code column is filled in)</p>
+</li>
+<li>
+<p>Have the General Import Template CSV filename handy for reference</p>
+</li>
+<li>
+<p>Open Claude (claude.ai or Cowork desktop app)</p>
+</li>
+</ul>
+<h1 id="generate-the-import-sheet-in-claude">5. Generate the Import Sheet in Claude</h1>
+<p><strong>STEP 1 Open Claude and paste the standard prompt</strong></p>
+<table>
+
+<thead>
+<tr class="header">
+<th><p><strong>COPY THIS PROMPT TO CLAUDE — Attach the Ramp CSV before sending</strong></p>
+<p>I am uploading a Ramp credit card statement CSV. Please generate</p>
+<p>the ResMan accounting import sheet using the following rules:</p>
+<p><strong>STEP 1 — FILTER ROWS</strong></p>
+<p>- Only include rows where Type = "Transaction"</p>
+<p>- Skip all rows where Type is anything else (transfers, payments, etc.)</p>
+<p>- Skip any row where the Accounting Category Code column is blank</p>
+<p>and list those separately as flagged/uncoded transactions</p>
+<p><strong>STEP 2 — BUILD TWO LINES PER TRANSACTION</strong></p>
+<p>For every valid transaction, create exactly two rows in the import file:</p>
+<p><strong>LINE 1 (Expense — Debit):</strong></p>
+<p>- Property Abbreviation : derived from Ramp Location (letters only, no numbers)</p>
+<p>- Date : Transaction Date</p>
+<p>- GL Account Number : Accounting Category Code from Ramp</p>
+<p>- Description : Merchant Description from Ramp</p>
+<p>- Debit : Amount</p>
+<p>- Credit : leave blank</p>
+<p>- Accounting Basis : Both</p>
+<p>- Line-Item Description : Merchant Description (same as Description)</p>
+<p>- Reversal Date : leave blank</p>
+<p>- Reference : leave blank</p>
+<p><strong>LINE 2 (CC Payable — Credit):</strong></p>
+<p>- Property Abbreviation : same as Line 1</p>
+<p>- Date : same as Line 1</p>
+<p>- GL Account Number : property CC GL code (see mapping below)</p>
+<p>- Description : Merchant Description (same as Line 1)</p>
+<p>- Debit : leave blank</p>
+<p>- Credit : Amount (same as Line 1 Debit)</p>
+<p>- Accounting Basis : Both</p>
+<p>- Line-Item Description : Merchant Description (same as Description)</p>
+<p>- Reversal Date : leave blank</p>
+<p>- Reference : leave blank</p>
+<p><strong>STEP 3 — PROPERTY &amp;amp; GL MAPPING</strong></p>
+<p>Use this table to map Ramp Location to Property Abbreviation and CC GL:</p>
+<p><strong>Ramp Location | Property Abbr. | CC Payable GL</strong></p>
+<p>------------------|----------------|---------------</p>
+<p>Rio Springs | RI | 1050-1</p>
+<p>Morgan Manor | MM | 1075-1</p>
+<p>Salado Creek | SA | 1071-1</p>
+<p>Istana | IS | 1092-1</p>
+<p>Green Oaks | GO | 1086-1</p>
+<p>University Cove | UC | 1066-5</p>
+<p>Mila | ML | 1044-1</p>
+<p>Valencia | VA | 1060-4</p>
+<p><strong>STEP 4 — OUTPUT FORMAT</strong></p>
+<p>- Output a CSV with exactly these column headers in this order:</p>
+<p>Property Abbreviation, Date, GL Account Number, Description,</p>
+<p>Debit, Credit, Accounting Basis, Line-Item Description,</p>
+<p>Reversal Date, Reference</p>
+<p>- Output a separate flagged CSV for missing GL transactions with:</p>
+<p>Date, Amount, Merchant Description, Ramp Location, External ID, Issue</p>
+<p>- Name the import file: Ramp_CC_Import_[PropertyCode]_[YYYYMM].csv</p>
+<p>- Name the flagged file: Ramp_CC_FLAGGED_[PropertyCode]_[YYYYMM].csv</p>
+<p>- Confirm that Total Debit = Total Credit (balanced) in the summary</p></th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+
+<p><strong>NOTE:</strong> The prompt above is embedded in this SOP. Copy it fresh each month — do not modify the wording. Attach the Ramp CSV before sending.</p>
+
+<p><strong>STEP 2 Attach the Ramp CSV and send</strong></p>
+<p>Before clicking Send, attach the Ramp CC statement CSV file to the Claude message.</p>
+<ul>
+<li>
+<p>Click the paperclip / attachment icon in Claude</p>
+</li>
+<li>
+<p>Select the downloaded Ramp CSV (e.g. 2026-02-10-2800-w-hutchins-pl-llc.csv)</p>
+</li>
+<li>
+<p>Click Send</p>
+</li>
+</ul>
+<p><strong>STEP 3 Review Claude's output</strong></p>
+<p>Claude will generate two files:</p>
+<ul>
+<li>
+<p>Ramp_CC_Import_[Code]_[YYYYMM].csv — the import file ready for ResMan</p>
+</li>
+<li>
+<p>Ramp_CC_FLAGGED_[Code]_[YYYYMM].csv — any uncoded transactions (if any)</p>
+</li>
+</ul>
+<p>Before downloading, verify Claude's summary shows:</p>
+<ul>
+<li>
+<p>Total Debit = Total Credit (balanced)</p>
+</li>
+<li>
+<p>Transaction count matches your expectation</p>
+</li>
+<li>
+<p>Correct property abbreviation and CC GL code</p>
+</li>
+</ul>
+
+<p><strong>IMPORTANT:</strong> If any transactions appear in the FLAGGED file, do NOT proceed with the import until those transactions are coded in Ramp. Go back to Ramp, assign the GL codes, re-download the statement, and re-run Claude.</p>
+
+<p><strong>STEP 4 Download and save the import file</strong></p>
+<p>Download both files from Claude to your computer.</p>
+<ul>
+<li>
+<p>Save the import CSV to your designated monthly reconciliation folder</p>
+</li>
+<li>
+<p>Naming convention: Ramp_CC_Import_[PropertyCode]_[YYYYMM].csv</p>
+</li>
+<li>
+<p>Example: Ramp_CC_Import_RI_202602.csv</p>
+</li>
+</ul>
+
+<p><strong>NOTE:</strong> Do not open and re-save the CSV in Excel before importing — this can alter date formats and cause import errors. If you need to review it, open it in read-only mode or Google Sheets.</p>
+
+<p><strong>PHASE B — Import into ResMan</strong></p>
+<h1 id="import-column-mapping">6. Import Column Mapping</h1>
+<p>The import CSV columns map to ResMan journal entry fields as follows:</p>
+<table>
+
+<thead>
+<tr class="header">
+<th><strong>CSV Column</strong></th>
+<th><strong>ResMan Field</strong></th>
+<th><strong>Notes</strong></th>
+</tr>
+<tr class="odd">
+<th><strong>Property Abbreviation</strong></th>
+<th>Entity / Property</th>
+<th>Must match ResMan property code exactly</th>
+</tr>
+<tr class="header">
+<th><strong>Date</strong></th>
+<th>Journal Date</th>
+<th>Transaction date from Ramp</th>
+</tr>
+<tr class="odd">
+<th><strong>GL Account Number</strong></th>
+<th>Account</th>
+<th>Expense GL or CC Payable GL</th>
+</tr>
+<tr class="header">
+<th><strong>Description</strong></th>
+<th>Description</th>
+<th>Merchant name from Ramp</th>
+</tr>
+<tr class="odd">
+<th><strong>Debit</strong></th>
+<th>Debit Amount</th>
+<th>Positive dollar amount on expense line</th>
+</tr>
+<tr class="header">
+<th><strong>Credit</strong></th>
+<th>Credit Amount</th>
+<th>Positive dollar amount on CC payable line</th>
+</tr>
+<tr class="odd">
+<th><strong>Accounting Basis</strong></th>
+<th>Basis</th>
+<th>"Both" — applies to cash and accrual</th>
+</tr>
+<tr class="header">
+<th><strong>Line-Item Description</strong></th>
+<th>Line Description / Memo</th>
+<th>Same as Description</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+<h1 id="resman-import-steps">7. ResMan Import Steps</h1>
+<p><strong>STEP 1 Log in to ResMan and select the property</strong></p>
+<ol type="1">
+<li>
+<p>Log in to ResMan at your company's ResMan URL</p>
+</li>
+</ol>
+<p><strong>STEP 2 Navigate to Journal Entry Import</strong></p>
+<ol start="2" type="1">
+<li>
+<p>From the main menu, go to: Accounting</p>
+</li>
+<li>
+<p>Select: Journal Entries</p>
+</li>
+<li>
+<p>Click: Import (or Upload Journal Entries — the label may vary by ResMan version)</p>
+</li>
+</ol>
+
+<p><strong>NOTE:</strong> If you do not see an Import option, confirm your user role has Journal Entry import permissions. Contact your ResMan administrator if needed.</p>
+
+<p><strong>STEP 3 Upload the CSV file</strong></p>
+<ol start="5" type="1">
+<li>
+<p>Click Browse or Choose File</p>
+</li>
+<li>
+<p>Navigate to and select your saved import CSV file (Ramp_CC_Import_[Code]_[YYYYMM].csv)</p>
+</li>
+<li>
+<p>Click Upload / Next</p>
+</li>
+</ol>
+<p><strong>STEP 4 Map columns (if prompted)</strong></p>
+<p>If ResMan shows a column-mapping screen, match the CSV headers to ResMan fields using the table in Section 6. The column names in the CSV are already formatted to match ResMan's expected headers — mapping should be automatic.</p>
+<p>If mapping is manual, set each field as follows:</p>
+<ul>
+<li>
+<p>CSV: Property Abbreviation → ResMan: Entity / Property</p>
+</li>
+<li>
+<p>CSV: Date → ResMan: Journal Date</p>
+</li>
+<li>
+<p>CSV: GL Account Number → ResMan: Account</p>
+</li>
+<li>
+<p>CSV: Description → ResMan: Description</p>
+</li>
+<li>
+<p>CSV: Debit → ResMan: Debit Amount</p>
+</li>
+<li>
+<p>CSV: Credit → ResMan: Credit Amount</p>
+</li>
+<li>
+<p>CSV: Accounting Basis → ResMan: Basis</p>
+</li>
+<li>
+<p>CSV: Line-Item Description → ResMan: Line Description / Memo</p>
+</li>
+</ul>
+<p><strong>STEP 5 Review the preview and verify balance</strong></p>
+<p>Before posting, ResMan will show a preview of the journal entries. Verify:</p>
+<ul>
+<li>
+<p>Row count = 2 rows per transaction (should be an even number)</p>
+</li>
+<li>
+<p>Total Debits = Total Credits (journal must be balanced — ResMan will block posting if not)</p>
+</li>
+<li>
+<p>Spot-check 2-3 entries: confirm property, date, GL, and merchant name look correct</p>
+</li>
+<li>
+<p>Dates fall within the correct posting period</p>
+</li>
+</ul>
+
+<p><strong>IMPORTANT:</strong> Do not post if Total Debits do not equal Total Credits. Go back to the import file, find the missing line, correct it, and re-upload.</p>
+
+<p><strong>STEP 6 Set journal description and post</strong></p>
+<ol start="8" type="1">
+<li>
+<p>Enter a Journal Description (header memo) for the batch, e.g.:</p>
+</li>
+</ol>
+
+<p>Ramp CC — Rio Springs — February 2026</p>
+
+<ol start="9" type="1">
+<li>
+<p>Select the correct Posting Period / Accounting Period</p>
+</li>
+<li>
+<p>Click Post (or Submit for Approval if your workflow requires manager approval)</p>
+</li>
+<li>
+<p>Confirm the success message — note the Journal Entry number for your records</p>
+</li>
+</ol>
+<p><strong>STEP 7 Verify the posted journal in ResMan</strong></p>
+<ol start="12" type="1">
+<li>
+<p>Go to Accounting → Journal Entries → Search / View All</p>
+</li>
+<li>
+<p>Locate the journal entry you just posted using the Journal Entry number or date</p>
+</li>
+<li>
+<p>Open it and confirm:</p>
+</li>
+</ol>
+<ul>
+<li>
+<p>All lines are posted (no errors or pending lines)</p>
+</li>
+<li>
+<p>Debit total and Credit total match</p>
+</li>
+<li>
+<p>GL accounts and property match the source Ramp data</p>
+</li>
+</ul>
+<ol start="15" type="1">
+<li>
+<p>Screenshot or save the confirmation for your records</p>
+</li>
+</ol>
+<h1 id="handling-flagged-uncoded-transactions">8. Handling Flagged / Uncoded Transactions</h1>
+<p>If Claude generates a FLAGGED file with uncoded transactions, handle them as follows:</p>
+<ol start="16" type="1">
+<li>
+<p>Open the FLAGGED CSV — it lists the date, amount, merchant, and External ID of each uncoded transaction</p>
+</li>
+<li>
+<p>Log in to app.ramp.com → Transactions → find each flagged transaction by date/merchant</p>
+</li>
+<li>
+<p>Assign the correct Accounting Category (GL code) to each transaction in Ramp</p>
+</li>
+<li>
+<p>Re-download the Ramp CSV for the same period</p>
+</li>
+<li>
+<p>Re-run Claude using the same prompt with the updated CSV</p>
+</li>
+<li>
+<p>Verify the flagged transactions no longer appear in the new FLAGGED file</p>
+</li>
+<li>
+<p>Import the corrected file into ResMan as a separate journal entry batch, or combine with the original if not yet posted</p>
+</li>
+</ol>
+<h1>11. Journal Entries template (added step)</h1>
+<p><em>Added in the app. It replaces the Section 6 column list.</em></p>
+<p>In ResMan choose Type = <strong>Journal Entries</strong> and pick the <strong>Property</strong> in the dropdown. The file has no property column. Its columns are: Date, GL Account Number, Description, Debit (Enter as positive), Credit (Enter as positive), Accounting Basis, Accounting Book, Department. Use one file per property.</p>
+<h1>10. Missing GL: fill from the General Ledger (added step)</h1>
+<p><em>Added in the app, not in the original SOP document.</em></p>
+<ol><li>Export the property <strong>General Ledger</strong> from ResMan (all months of the year) as .xlsx and add it in the General Ledger box.</li>
+<li>For a transaction with no Accounting Category Code, the app first looks for the same merchant coded elsewhere in the Ramp file. If none, it uses the GL your ledger history shows for that vendor, and uses the Ramp memo to choose between several.</li>
+<li>Each filled GL is marked High, Medium or Low confidence on the <strong>GL assigned</strong> tab. Review the Low ones. A vendor split across many GLs, such as Home Depot, is usually Low.</li>
+<li>Only merchants with no ledger history stay flagged. Code those in Ramp.</li></ol>
+<h1>9. Bill check: AP Aging and Invoice Detail (added step)</h1>
+<p><em>This step was added in the app. It is not in the original SOP document yet.</em></p>
+<p>Before posting a Ramp payment as an expense, confirm there is not already a bill for it in ResMan. Otherwise the expense is booked twice.</p>
+<ol>
+<li>In ResMan run <strong>AP Aging Detail</strong> (as of today) and <strong>Invoice Detail</strong> (1/1 to today) for each property. Save them as .xlsx.</li>
+<li>Drop both reports into the app with the Ramp CSVs. A .zip of them works too.</li>
+<li>The app matches each Ramp payment to a bill by vendor name and exact amount, and marks it:
+<ul><li><strong>Open bill found</strong>: the payment must be closed against that bill in ResMan, paid with the property CC GL. The app leaves it out of the import file.</li>
+<li><strong>Bill already entered</strong>: the bill is in Invoice Detail and no longer open. Check it was not paid another way before importing.</li>
+<li><strong>No bill found</strong>: it imports as the normal two-line journal entry. If it is a vendor invoice, create the bill in ResMan.</li></ul></li>
+<li>Open the <strong>Bill check</strong> tab on each card, or download the Bill check CSV or workbook tab, and work through it.</li>
+</ol>
+</div></details>
+
+  <div id="bar"></div>
+  <div id="list"></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+'use strict';
+/* ---------- reference data (SOP section 3) ---------- */
+var PROPS=[
+ {abbr:'RI',name:'Rio Springs',gl:'1050-1',op:'1050',alias:['rio springs','2800 w hutchins'],st:'2800 W Hutchins Pl',addr:'2800 W Hutchins Pl, San Antonio, TX 78224',llc:'2800 W Hutchins Pl LLC'},
+ {abbr:'MM',name:'Morgan Manor',gl:'1075-1',op:'1075',alias:['morgan manor','7135 oaklawn'],st:'7135 Oaklawn Dr',addr:'7135 Oaklawn Drive, San Antonio, TX 78229',llc:'7135 Oaklawn Dr LLC'},
+ {abbr:'SA',name:'Salado Creek',gl:'1071-1',op:'1071',alias:['2383 i-410','salado creek'],st:'2383 NE Loop 410',addr:'2383 Northeast Loop 410, San Antonio, TX 78217',llc:'2383 I-410 LLC'},
+ {abbr:'IS',name:'Istana',gl:'1092-1',op:'1092',alias:['4462 wurzbach','istana'],st:'4462 Wurzbach Rd',addr:'4462 Wurzbach Road, San Antonio, TX 78238',llc:'4462 Wurzbach LLC'},
+ {abbr:'GO',name:'Green Oaks',gl:'1086-1',op:'1086',alias:['green oaks','5903 danny kaye'],st:'5903 Danny Kaye Dr',addr:'5903 Danny Kaye Drive, San Antonio, TX 78240',llc:'5903 Danny Kaye LLC'},
+ {abbr:'UC',name:'University Cove',gl:'1066-5',op:'1066',alias:['university cove','12200 i-10'],st:'12200 Interstate 10',addr:'12200 Interstate 10, San Antonio, TX 78230',llc:'12200 I-10 LLC'},
+ {abbr:'ML',name:'Mila',gl:'1044-1',op:'1044',alias:['mila apartment','mila'],st:'11726 West Ave',addr:'11726 West Avenue, San Antonio, TX 78216',llc:'Mila Apartment Investments LLC'},
+ {abbr:'VA',name:'Valencia',gl:'1060-4',op:'1060',alias:['glen ridge','valencia'],st:'5111 Glen Ridge Dr',addr:'5111 Glen Ridge Drive, San Antonio, TX 78229',llc:'Glen Ridge 5111 LLC'}
+];
+var COA={"1000":["Cash and Banking","Bank"],"10000-1":["CD Bank","Bank"],"1000-1":["Clearing","Bank"],"1001":["Chase Operating Account","Bank"],"1002":["Chase Saving Account","Bank"],"1003":["SBT Security Deposit (0710)","Bank"],"1004":["Horizon Payroll A/C 7490","Bank"],"1004-19":["HP Chase Operating (1659)","Bank"],"1005":["HP Security Deposit (9538)","Bank"],"1006":["HP Reserves (9397)","Bank"],"1007":["Schertz Operating (Closed)","Bank"],"1008":["SOL Reserve","Bank"],"1009":["SOL Security Deposit","Bank"],"1010":["BW Operating","Bank"],"1011":["SOL Taxes and Insurance","Bank"],"1012":["BW Security Deposit","Bank"],"1013":["BW Distribution","Bank"],"1014":["BW Reserves","Bank"],"1015":["HP Distribution","Bank"],"1016":["BW Petty Cash","Bank"],"1017":["SOL Operating-Chase Bank","Bank"],"1018":["SOL Security Deposit-Chase Bank","Bank"],"1019":["Operating Checking Account","Bank"],"1020":["VDO Operating","Bank"],"1021":["VDO Security deposit","Bank"],"1022":["VDO Capital reserves","Bank"],"1023":["VDO Distribution","Bank"],"1025":["LODGE Operating","Bank"],"1026":["LODGE Sec. Deposit","Bank"],"1027":["LODGE Capital Reserves","Bank"],"1028":["LODGE Distribution","Bank"],"1029":["LODGE Distibution","Bank"],"1030":["BROOKS Operating","Bank"],"1030-1":["1","Bank"],"1031":["BROOKS Sec. Deposit","Bank"],"1032":["BROOKS Capital Reserves","Bank"],"1033":["BROOKS Distribution","Bank"],"1034":["SOL Distribution","Bank"],"1035":["SOL Reserves","Bank"],"1036":["BW New Operating Account","Bank"],"1040":["Vanitas Operating","Bank"],"1041":["Vanitas Security Deposit","Bank"],"1042":["Vanitas Capital Reserves","Bank"],"1043":["Vanitas Distribution","Bank"],"1044":["Mila Operating","Bank"],"1044-1":["Mila Ramp CC","Bank"],"1045":["Mila Security Deposits","Bank"],"1046":["Mila Capital Reserves","Bank"],"1047":["Mila Investor Distributions","Bank"],"1048":["Loan Mila GP","Bank"],"1050":["Rio Springs Operating","Bank"],"1050-1":["Rio Ramp CC 1853","Bank"],"1051":["Rio Springs Security Deposit","Bank"],"1052":["Rio Springs Capital Reserves","Bank"],"1053":["Rio Springs Distribution","Bank"],"1054":["Alamo CD's 6947","Bank"],"1055":["Boston Woods CD 6899","Bank"],"1056":["Rio Springs CD 6775","Bank"],"1056-1":["Rio Springs CD 9170","Bank"],"1057":["VAM CD 6824","Bank"],"1057-1":["Rio Springs CD 9173","Bank"],"1058":["Rio Springs CD 9167","Bank"],"1058-1":["Rio Springs CD 9171","Bank"],"1059":["Rio Springs CD 9169","Bank"],"1059-1":["Rio Springs CD 9172","Bank"],"1060":["Valencia Operating","Bank"],"1060-1":["Valencia CD 8678","Bank"],"1060-2":["Valencia CD 8680","Bank"],"1060-3":["Valencia CD 8682","Bank"],"1060-4":["Valencia Ramp CC 5382","Bank"],"1060-5":["Valencia CD 8779","Bank"],"1060-6":["Valencia Cd 8780","Bank"],"1060-7":["Valencia CD First Bank","Bank"],"1060-8":["Valencia CD Encore Bank","Bank"],"1061":["Valencia Security Deposit","Bank"],"1062":["Valencia Reserves","Bank"],"1063":["Valencia Distributions","Bank"],"1066":["University Operating","Bank"],"1066-1":["UC CD 8527","Bank"],"1066-2":["UC CD 8528","Bank"],"1066-3":["UC CD 8529","Bank"],"1066-4":["UC CD 8530","Bank"],"1066-5":["UC Ramp CC 9637","Bank"],"1067":["Univeristy Security Deposit","Bank"],"1068":["University Capital Reserves","Bank"],"1069":["University Distribution","Bank"],"1070":["University Savings","Bank"],"1071":["SaladoCreek Operating","Bank"],"1071-1":["Salado Ramp CC 6713","Bank"],"1071-2":["Salado CDs 8584","Bank"],"1071-3":["Salado Cds 8585","Bank"],"1072":["SaladoCreek Reserves","Bank"],"1073":["SaladoCreek Deposits","Bank"],"1074":["SaladoCreek Distributions","Bank"],"1074-1":["Salado frontier Bank","Bank"],"1074-2":["Salado frontierbank","Bank"],"1075":["Morgan Manor Operating","Bank"],"1075-1":["Morgan Ramp CC 4789","Bank"],"1075-2":["Morgan Cds 8946","Bank"],"1075-3":["Morgan Cds 8948","Bank"],"1075-4":["Morgan Cds 8949","Bank"],"1075-5":["Morgan CD First Bank","Bank"],"1076":["Morgan Manor Deposits","Bank"],"1077":["Morgan Manor Capital Reserves","Bank"],"1078":["Morgan Manor Investor Distributions","Bank"],"1079":["Achieve Payroll","Bank"],"1080":["Achieve Properties","Bank"],"1080-1":["Ramp Credit Card 6150","Bank"],"1081":["Achieve Properties CC 1938","Bank"],"1082":["Achieve Investment Group","Bank"],"1083":["Achieve Investment Group","Bank"],"1084":["AIG Escrow","Bank"],"1085":["Salado GFCU Business Checking(closed)","Bank"],"1085-1":["Salado GFCU Reserve Acct Rebuild 8 Units(closed)","Bank"],"1085-2":["Rio springs CD  9173","Bank"],"1086":["Green Oaks Operating","Bank"],"1086-1":["Green Oaks Ramp CC 2916","Bank"],"1086-2":["Green Oaks Key Bank Account","Bank"],"1086-3":["Green Oaks Voya Bank Account","Bank"],"1087":["Green Oaks Deposits","Bank"],"1088":["Green Oaks Capital Reserves","Bank"],"1089":["Green Oaks Investor Distributions","Bank"],"1090":["UFCU (6724)","Bank"],"1091":["Depository Account","Bank"],"1092":["Istana Wurzbach Operation","Bank"],"1092/1":["Istana Reserves 2227","Bank"],"1092-1":["Istana Ramp CC","Bank"],"1093":["Istana Wurzbach Construction","Bank"],"1094":["Istana Wurzbach Reserve","Bank"],"1095":["Petty Cash","Bank"],"1095-1":["Istana PNC Bank","Bank"],"1095-2":["Istana PNC Bank","Bank"],"1096":["Property Manager Petty Cash","Bank"],"1097":["Morgan Manor CD 8949","Bank"],"1097-1":["Morgan Manor CD 8948","Bank"],"1098":["Lowes Credit Card","Bank"],"1099":["Personal Accounts","Bank"],"1100":["Rent Receivable","Accounts Receivable"],"1110":["Accounts Receivable","Accounts Receivable"],"1120":["A/R - Other","Accounts Receivable"],"1130":["Bad Debt","Accounts Receivable"],"1135":["CD's","Accounts Receivable"],"1140":["Short Term Rental Bad Debt","Accounts Receivable"],"1145":["A/R Other","Accounts Receivable"],"1150":["Suspense","Other Current Asset"],"1200":["Escrow Accounts","Other Current Asset"],"1203":["Property  Tax Bank diff escrow","Other Current Asset"],"1204":["Rate cap escrow","Other Current Asset"],"1205":["Tax Escrow","Other Current Asset"],"1206":["Payroll Escrow","Other Current Asset"],"1210":["Insurance Escrow","Other Current Asset"],"1220":["Prepaid Assets","Other Current Asset"],"1222":["Prepaid Expenses","Other Current Asset"],"1225":["Prepaid Insurance","Other Current Asset"],"1230":["Prepaid RE Taxes","Other Current Asset"],"1232":["Prepaid Workmans Insurance","Other Current Asset"],"1233":["Prepaid Franchise Tax","Other Current Asset"],"1235":["Utility Deposits","Other Current Asset"],"1240":["1031 Exchange","Other Current Asset"],"1250":["Undeposited Funds","Other Current Asset"],"1251":["Earnest Money Received","Other Asset"],"1260":["Defeasance Reserves","Other Current Asset"],"1261":["Insuranc Loss Deposit","Other Current Asset"],"1262":["Construction Reserve","Other Current Asset"],"1263":["Interest Reserve","Other Current Asset"],"1264":["xEQUITY Interest Reserve","Other Current Asset"],"1265":["Replacement Reserve","Other Current Asset"],"1270":["Repair Reserves Held by Lender","Other Current Asset"],"1271":["Covid-19 Debt Service Reserve","Other Current Asset"],"1275":["Green Repairs Reserve Held by Lender","Other Current Asset"],"1280":["Capital Expenditures","Other Current Asset"],"1285":["Due From Buyer","Other Current Liability"],"1290":["Advances","Other Current Asset"],"1291":["Advance to Vendors","Other Current Asset"],"1292":["Advance from/to BW","Other Current Asset"],"1293":["Advance to VDO Apt","Other Current Asset"],"1294":["Advance to Brook TownHomes","Other Current Asset"],"1295":["Syndication Costs","Other Current Asset"],"1296":["Employee Advance","Other Current Asset"],"1300":["Fixed Assets","Fixed Asset"],"1301":["Marketing &  Advertising","Non-Operating Expense"],"1302":["Expenses for Short Term Rental","Non-Operating Expense"],"1305":["Land","Fixed Asset"],"1306":["Corp Office","Fixed Asset"],"1310":["Building and Improvements (27.5yr)","Fixed Asset"],"1311":["Building and Improvements (5yr)","Fixed Asset"],"1312":["Fitness Center","Non-Operating Expense"],"1315":["Office/Laundry/Club Room/Model Unit","Non-Operating Expense"],"1318":["Foundation & Structural Repair","Fixed Asset"],"1319":["Plumbing Repair","Non-Operating Expense"],"1320":["Building and Improvements - Initial Purchase","Fixed Asset"],"1325":["Building Improvement - Additions","Non-Operating Expense"],"1330":["Exterior Paint  & Woodwork","Non-Operating Expense"],"1335":["Vinyl & Carpet Replacement","Non-Operating Expense"],"1340":["HVAC Replacement","Non-Operating Expense"],"1345":["Plumbing Improvements","Non-Operating Expense"],"1346":["Water Conservation Expenses","Non-Operating Expense"],"1350":["Rehab Payroll","Non-Operating Expense"],"1351":["Rehab Hskpg Payroll","Non-Operating Expense"],"1352":["Rehab Electric","Non-Operating Expense"],"1355":["Roof Replacement/Repair","Non-Operating Expense"],"1360":["Stairs & Landings","Non-Operating Expense"],"1365":["Boiler Replacement","Non-Operating Expense"],"1366":["Sewer Meter Pymt Plan","Non-Operating Expense"],"1370":["Interior Unit Rehab","Non-Operating Expense"],"1371":["Inspections","Non-Operating Expense"],"1372":["Renovation Supplies","Non-Operating Expense"],"1375":["Exterior Contract Labor","Non-Operating Expense"],"1380":["",""],"1385":["Site Improvements (15yr)","Non-Operating Expense"],"1390":["Initial Purchase - 15yr Assets","Fixed Asset"],"1395":["Fencing & Balconies","Non-Operating Expense"],"1396":["Alarm, Camera & Pool","Non-Operating Expense"],"1400":["Landscaping Site Work and side walks","Non-Operating Expense"],"1405":["Lighting","Non-Operating Expense"],"1410":["Parking Lot Repairs/New","Non-Operating Expense"],"1415":["Sidewalks","Non-Operating Expense"],"1420":["Site Drainage","Non-Operating Expense"],"1425":["Adminstrative Expense","Non-Operating Expense"],"1435":["Rehabilitation fund A/c","Other Asset"],"1438":["Loan from Private Lender","Other Current Liability"],"1439":["Loan from Owners Personal Account","Other Current Asset"],"1440":["Loan to SOL Apartment","Other Current Asset"],"1441":["Use 2111 - Loan from VDO","Other Current Liability"],"1442":["Loan to Brooks Townhomes","Other Current Asset"],"1443":["Loan to Rio Springs","Other Current Asset"],"1444":["Loan to Boston Woods","Other Current Asset"],"1445":["Loan to Hutchins Palm Apartment","Other Current Asset"],"1446":["Loan to Alamo Park","Other Current Asset"],"1447":["SAHA Deposits","Other Asset"],"1448":["Loan from VDO","Other Current Liability"],"1449":["Use 1442 - Loan to Brooks Townhomes","Other Current Asset"],"1450":["Furniture & Equipment (7yr)","Fixed Asset"],"1451":["Loan to Villas @ Mueller","Other Current Asset"],"1452":["Loan to Rio Springs","Other Current Asset"],"1453":["Loan to Achieve Investment Group","Other Current Asset"],"1454":["Loan to Achieve Properties","Other Current Asset"],"1455":["Initial Purchase - 7yr Assets","Fixed Asset"],"1456":["Loan to Valencia","Other Current Asset"],"1457":["Loan to VDO","Other Current Asset"],"1458":["Tools & Equipment","Fixed Asset"],"1459":["Loan to University Cove","Other Current Asset"],"1460":["Maintenance Tools & Equipment","Non-Operating Expense"],"1461":["loan to NBJS57 (Single Family)","Other Current Asset"],"1462":["Loan to Single Family","Other Current Liability"],"1463":["Loan to UFCU","Other Current Asset"],"1464":["Loan to Achieve Academy","Other Current Asset"],"1465":["Office Furniture & Equipment","Fixed Asset"],"1466":["Loan to Boston Woods New","Other Current Asset"],"1467":["Loan to SAI","Other Current Asset"],"1468":["Loan To Salado Creek","Other Current Asset"],"1469":["Loan To Morgan Manor","Other Current Asset"],"1470":["Playground Equipments","Non-Operating Expense"],"1471":["Loan to Green Oaks","Other Current Asset"],"1472":["Loan to The Mila Apts","Other Current Asset"],"1473":["Loan to Wurzbach","Other Current Asset"],"1474":["Loan to Limmerloop","Other Current Asset"],"1475":["Loan to Converse","Other Current Asset"],"1476":["Loan to San Marcos","Other Current Asset"],"1477":["3rd party Loan","Other Current Asset"],"1478":["Loan to private borrower","Other Current Asset"],"1480":["Appliances","Non-Operating Expense"],"1485":["Initial Purchase - 5yr Assets","Fixed Asset"],"1490":["Yearly one time exp-legal, lien","Non-Operating Expense"],"1495":["Cabinets","Non-Operating Expense"],"1500":["Computers and Software","Non-Operating Expense"],"1505":["Flooring Replacement","Non-Operating Expense"],"1510":["Electrical & Lighting","Non-Operating Expense"],"1515":["Service and Utility Expense","Non-Operating Expense"],"1520":["Resurfacing: Tub, Sink, Counters","Non-Operating Expense"],"1525":["Signage","Non-Operating Expense"],"1530":["Window Coverings/Glass replacement","Non-Operating Expense"],"1535":["Repairs & Maintenance","Non-Operating Expense"],"1540":["Fence & Auto Gate","Non-Operating Expense"],"1545":["Travel Expenses","Non-Operating Expense"],"1550":["Termite Warranty","Non-Operating Expense"],"1560":["Meals and Entertainment (Company)","Non-Operating Expense"],"1599":["Accumulated Depreciation","Fixed Asset"],"1600":["Intangible Assets","Fixed Asset"],"1610":["Organization and Acquisition Costs","Fixed Asset"],"1615":["Financing Costs","Fixed Asset"],"1616":["Refinanced Closing Cost","Fixed Asset"],"1620":["Legal Costs","Fixed Asset"],"1625":["Accumulated Amortization","Fixed Asset"],"1630":["Due Diligence","Fixed Asset"],"2000":["Accounts Payable","Accounts Payable"],"2010":["A/P - Operations","Accounts Payable"],"2011":["New Mortgage Loan","Long Term Liability"],"2015":["A/P - Other","Accounts Payable"],"2016":["CBRC Corporation","Accounts Payable"],"2020":["Security Deposit Refund","Accounts Payable"],"2045":["Property Tax Payable","Other Current Liability"],"2058":["VAM CCxx6270","Other Current Liability"],"2059":["VAM CCXX5829","Other Current Liability"],"2060":["Achieve Properties CC 1938","Other Current Liability"],"2061":["Achieve Investment Group CC 6152","Other Current Liability"],"2100":["Payables","Other Current Liability"],"2100-01":["Credit Card","Other Current Liability"],"2100-02":["Inter Company Payments","Other Current Liability"],"2100-03":["Hutchins-CC-2575","Other Current Liability"],"2100-04":["Lowes Credit Card","Other Current Liability"],"2101":["Loan from Boston Woods","Other Current Liability"],"2102":["Loan from Achieve Investment Group","Other Current Liability"],"2103":["Loan from achieve properties","Other Current Liability"],"2104":["Loan from Achieve Properties","Other Current Liability"],"2105":["Bostonwood CC","Other Current Liability"],"2106":["Alamo Chase CC","Other Current Liability"],"2107":["Hutchins Palms CC","Other Current Liability"],"2108":["VDO Chase CC 7220","Other Current Liability"],"2109":["Brooks Chase CC_9160","Other Current Liability"],"2110":["Accrued Insurance","Other Current Liability"],"2111":["Loan from VDO","Other Current Liability"],"2112":["Accrued Taxes","Other Current Liability"],"2113":["Property Tax Payable","Other Current Liability"],"2114":["Loan From Brooks Townhomes","Other Current Liability"],"2115":["Loan from Hutchins","Other Current Liability"],"2116":["Loan from Alamo","Other Current Liability"],"2117":["Loan from Personal","Other Current Liability"],"2118":["Loan from VAM","Other Current Liability"],"2119":["Valencia CC 2301","Other Current Liability"],"2120":["Payroll Liabilities","Other Current Liability"],"2121":["Child Support","Other Current Liability"],"2122":["Payroll Tax Liability","Other Current Liability"],"2123":["H&B Medical 1 & Dental (Post Tax)","Other Current Liability"],"2123-1":["Loan from Valencia","Other Current Liability"],"2124":["Valencia CC 2301","Other Current Liability"],"2125":["Rio Springs Credit Card","Other Current Liability"],"2126":["Loan from Rio","Other Current Liability"],"2127":["Loan from SOL","Other Current Liability"],"2128":["Interim Manager Salary","Other Current Liability"],"2129":["SBA Loan","Other Current Liability"],"2129-1":["SBA Loan- Wells Fargo","Other Current Liability"],"2130":["Security Deposit Payable","Other Current Liability"],"2131":["COVID-19","Other Current Liability"],"2132":["Loan From Salado Creek","Other Current Liability"],"2133":["Loan From Morgan Manor","Other Current Liability"],"2134":["Loan from Green Oaks","Other Current Liability"],"2135":["Loan from The Mila Apts","Other Current Asset"],"2136":["Loan from Istana","Other Current Liability"],"2140":["Pet Fee Deposits","Other Current Liability"],"2150":["Earnest Money","Other Current Liability"],"2155":["Mortgage Interest Payable","Other Current Liability"],"2160":["Expense & Rate Lock Deposit","Other Current Liability"],"2170":["Loan from University Cove","Other Current Liability"],"2175":["University Cove CC 1938","Other Current Liability"],"2180":["Accrued Expenses","Other Current Liability"],"2185":["Due To Seller","Other Current Liability"],"2190":["Accrued Payroll","Other Current Liability"],"2197":["SOL CC xx6039","Other Current Liability"],"2199":["Tenant Prepayments","Other Current Liability"],"2200":["Long Term Liabilities","Long Term Liability"],"2210":["Mortgage Principal","Long Term Liability"],"2211":["Fidelity Loan Account 9026-10","Long Term Liability"],"2304":["Payroll - Loan from Achieve Properties","Other Current Liability"],"3000":["Capital / Retained Earnings","Equity"],"3005":["Partner Equity","Equity"],"3010":["Partner Capital Contributions","Equity"],"3011":["Partner Preffered Cls A-4","Equity"],"3015":["Capital - Lodge on Perrin Creek - Summary","Equity"],"3020":["Owner Contributions","Equity"],"3030":["Distributions","Equity"],"3056":["Capital","Equity"],"3101":["Capital","Equity"],"3102":["Capital","Equity"],"3103":["Capital","Equity"],"3104":["Capital","Equity"],"3105":["Capital","Equity"],"3106":["Capital","Equity"],"3107":["Capital - Cidadela LLC","Equity"],"3108":["Capital - Jeyasankaran Ragouvaran","Equity"],"3109":["Capital - Shis-Fen Tiffany Jen","Equity"],"3110":["Capital - Jacques Lesage","Equity"],"3111":["Capital - Kyle Kovats","Equity"],"3112":["Capital - Dimension Inv LLC (Raji Durairaj)","Equity"],"3113":["Capital - Vijay S Ramamoorthy","Equity"],"3114":["Capital - Kevin Jurica","Equity"],"3115":["Capital - BGT Homes LLC (Rick Tkachuk)","Equity"],"3116":["Capital - RedBrick Solution (Devaprakash Ravi)","Equity"],"3117":["Capital - Michael L Soulek and Susan E Soulek","Equity"],"3118":["Capital - Kissman LLC (Pradeep Mistry)","Equity"],"3119":["Capital - Pradeep Mistry","Equity"],"3120":["Capital - Masud Kamal","Equity"],"3121":["Capital - Mark McLaurin","Equity"],"3122":["Capital - Hanis Thomas","Equity"],"3123":["Capital - The Buckman Family Trust (Ron Buckman)","Equity"],"3124":["Capital - Samuel Lucas Jobe","Equity"],"3125":["Capital - Ramprabhu Ratnam","Equity"],"3126":["Capital - Libad LLC (Jose Cantu)","Equity"],"3127":["Capital - Chris Foret","Equity"],"3128":["Capital - Gary Levy","Equity"],"3129":["Capital - Alias Shaik","Equity"],"3130":["Capital - Sampati Holdings LLC - Series LLC","Equity"],"3131":["Capital - Xiu Wen Rogers","Equity"],"3132":["Capital - Twin Roses Investors Group LLC","Equity"],"3133":["Capital - L7Real Estate Inv LLC (Audie Clark)","Equity"],"3134":["Capital - Justin Rostant","Equity"],"3135":["Capital - Krishnakumar Durairaj and Shankari","Equity"],"3136":["Capital - JMB Group LLC (Jason Bartley)","Equity"],"3137":["Capital - Diana Jelen","Equity"],"3138":["Capital - Steve Rose Properties (Steve Rose)","Equity"],"3139":["Capital - Equity Trust Company Custodian FBO (Sree","Equity"],"3140":["Capital - Dan Swayne","Equity"],"3141":["Capital - Randall L Shussler","Equity"],"3142":["Capital - Heath A Sumrow","Equity"],"3143":["Capital - Franklin Hldngs Family Ltd (Jean C","Equity"],"3144":["Capital - Satya Perkari","Equity"],"3145":["Capital - 3D Group Inc 401K Plan (Alex Levin)","Equity"],"3146":["Capital - Craig Scott","Equity"],"3147":["Capital - Uptime Investments LLC (Alex Zetune)","Equity"],"3148":["Capital - Alex K Dayrit","Equity"],"3149":["Capital - Muru Venkat","Equity"],"3150":["Capital - Double X Invs LLC (Adam Valunzuela)","Equity"],"3151":["Capital - Alynab Business LLC (Nadir Makani)","Equity"],"3152":["Capital - Milana Pokras and Dmitrly Pokras","Equity"],"3153":["Capital - Nitin Juthani","Equity"],"3154":["Capital - Christian Iborrola","Equity"],"3155":["Capital - Chakkera Family Trust Dated 11/21/2007","Equity"],"3156":["Capital - Srikanth R Billa","Equity"],"3157":["Capital - Praveen Anamula","Equity"],"3158":["Capital -  Ventkatram R Pakala","Equity"],"3159":["Capital - Muru Venkat","Equity"],"3160":["Capital - Charles J. Zanetti","Equity"],"3161":["Capital - Ron and Ginny","Equity"],"3162":["Capital - JEREMY GIROIR","Equity"],"3163":["Capital - MICHAEL HOANG","Equity"],"3164":["Capital - MICHELLE HOANG","Equity"],"3165":["Capital - RAJEEV GANDHI","Equity"],"3166":["Capital - Yung Tao","Equity"],"3167":["Capital - Pranav Shah","Equity"],"3168":["Capital - Audrey Cheong","Equity"],"3170":["Capital - Hema Kishore Chapala","Equity"],"3171":["Capital - Justin Cromartie","Equity"],"3172":["Capital - Vince Bertucci","Equity"],"3173":["Capital - Vinaya Gogineni","Equity"],"3174":["Capital - Darshana Sikakumaran","Equity"],"3175":["Capital - Greg Meier","Equity"],"3176":["Capital - Veer Karri","Equity"],"3177":["Capital - Kyle Burford","Equity"],"3178":["Capital - Gabe Reed (Bietz)","Equity"],"3179":["Capital - Mark Calhoun","Equity"],"3180":["Capital - Timothy Saunders","Equity"],"3181":["Capital - Nandakumar Pothapu Reddy","Equity"],"3182":["Capital - Steve Suh","Equity"],"3183":["Capital - Colin Duffield","Equity"],"3184":["Capital - Jay Amin","Equity"],"3185":["Capital - Guru Prasad","Equity"],"3186":["Capital - Yan Yan","Equity"],"3187":["Capital - David Goberville","Equity"],"3188":["Capital - Muthu Periaswamy","Equity"],"3189":["Capital - John Paul Spearman","Equity"],"3190":["Capital - Ronald F George","Equity"],"3191":["Capital - Chris Siemasko","Equity"],"3192":["Capital - Claire Homoky","Equity"],"3193":["Capital - Elias Shaikh","Equity"],"3194":["Capital - Prathap Reddy Tumilla","Equity"],"3195":["Capital - Sreeram Vadlamani","Equity"],"3196":["Capital - Sethuraj Palaniappan","Equity"],"3197":["Capital - Gaourav Goyal","Equity"],"3198":["Capital - Madhu Badireddy","Equity"],"3199":["Capital - Anjan Donditeya","Equity"],"3200":["Rory Buckner","Equity"],"3201":["Kiran Cheruku - Owner Payment","Equity"],"3202":["Carlos Rodriguez","Equity"],"3203":["Jean-Claude Wilcox - Owner Payment","Equity"],"3204":["Nisha Kadekia and Ravi Khairate-  Owner Payment","Equity"],"3205":["Edward Loyd -  Owner Payment","Equity"],"3206":["William Thomas and Sherlyn White  -Owner Payment","Equity"],"3207":["Vijayakumar Balasundaram - Owner Payment","Equity"],"3208":["Kim and Paul Hoang - Owner Payments","Equity"],"3209":["Pradeep Misrty - Owner Payment","Equity"],"3210":["Carlos Otterbach-- Owner Payment","Equity"],"3211":["Capital - John Monteiro","Equity"],"3212":["Capital - Raghu Gupta","Equity"],"3213":["Capital - Jaswant Nugala","Equity"],"3214":["Capital - David Schmidt","Equity"],"3215":["Capital - James Kandasamy","Equity"],"3216":["Capital - Bryce Smith","Equity"],"3217":["Capital - Sher Senior","Equity"],"3218":["Capital - Achamkulamgara Arun","Equity"],"3219":["Capital - Kishore Kankipati","Equity"],"3220":["Capital - Ravi Durairaj ROTH IRA","Equity"],"3221":["Capital - Venkateshwarlu Yadha","Equity"],"3222":["Capital - Vijay Prabhakaran","Equity"],"3223":["Capital - Richard O'Brien","Equity"],"3224":["Capital - Ruchi Agarwal","Equity"],"3225":["Capital - Dan Nolen III","Equity"],"3226":["Capital - Seshu Vavilikolanu","Equity"],"3227":["Capital - Anand Puttaswamy","Equity"],"3228":["Capital - Santosh Upadhya","Equity"],"3229":["Capital - Ravi Shankar Rao","Equity"],"3230":["Capital - Steve Rose Properties LLC","Equity"],"3231":["Capital - Elvis Rodricks","Equity"],"3232":["Capital - Pak Choi","Equity"],"3233":["Capital - Shobharani Tatineni","Equity"],"3234":["Capital - Carrie Young","Equity"],"3235":["Capital Krishnakumar Durairaj ROTH IRA","Equity"],"3236":["Capital - Lisa Yoo","Equity"],"3237":["Capital - Jonathan Krebbs","Equity"],"3238":["Capital - Nicholas J Olenec","Equity"],"3239":["Capital - Dillip Subramani","Equity"],"3240":["Capital - Art Wilkerson","Equity"],"3241":["Capital - Shih-Fen Tiffany Jen","Equity"],"3242":["Capital - CO INVEST LLC c/o Carlos Otterbach","Equity"],"3243":["Capital - Sunwest Trust as Custodian","Equity"],"3244":["Capital - Self Directed IRA (FBO)","Equity"],"3245":["Capital - Muru Venkat","Equity"],"3246":["Capital - Yeshwanth  Bobbiti","Equity"],"3247":["Capital - Praveen Anamula","Equity"],"3248":["Capital - Kissman LLC","Equity"],"3249":["Capital - Twin Roses Investors Group LLC","Equity"],"3250":["Partner Draw / Owner Payments","Equity"],"3251":["Ketan Shah","Equity"],"3252":["Jeyasankaran Ragouvaran","Equity"],"3253":["Michael L Soulek and Susan E Soulek","Equity"],"3254":["Kissman LLC (Pradeep Mistry)","Equity"],"3255":["James Kandasamy","Equity"],"3256":["Shih-Fen Tiffany Jen - Owner Payment","Equity"],"3257":["CO INVEST LLC- Owner Payment","Equity"],"3258":["Sunwest Trust as Custodian - Owner Payment","Equity"],"3259":["Self Directed IRA (FBO) - Owner Paymemt","Equity"],"3260":["Ravi Durairaj ROTH IRA - Owner Payments","Equity"],"3261":["Muru Venkat","Equity"],"3262":["Yeshwanth  Bobbiti - Owner Payments","Equity"],"3263":["Devaprakash Ravi - Owner Payment","Equity"],"3264":["Praveen Anumula","Equity"],"3265":["Dan Nolen III - Owner Payments","Equity"],"3266":["Kissman LLC - Owner Payment","Equity"],"3267":["Twin Roses Investors Group LLC - Owner Payment","Equity"],"3268":["Michael Wingate - Owner Payment","Equity"],"3269":["Krishnakumar Durairaj and Shankari - owner Payment","Equity"],"3270":["Steve Rose Properties LLC - Owner Payments","Equity"],"3271":["CurryATX LLC - Owner Payment","Equity"],"3272":["Adam Valenzuela","Equity"],"3273":["Danielle Famolare - Owner Payments","Equity"],"3274":["Raul S Medellin - Owner Payments","Equity"],"3275":["Krishnakumar Durairaj ROTH IRA - Owner Payments","Equity"],"3276":["Miriam Nalumansi - Owner Payments","Equity"],"3277":["John Kroeger - Owner Payments","Equity"],"3278":["Steven R.  Homoky - Owner Payments","Equity"],"3279":["Kevin Jurica - Owner Payments","Equity"],"3280":["Art Wilkerson - Owner Payments","Equity"],"3281":["Paul Moody - Owner Payments","Equity"],"3282":["Sunil Shah","Equity"],"3283":["Jawaid Iqbal - Owner Payment","Equity"],"3284":["Vijay Ramamoorthy - Owner Payments","Equity"],"3285":["Owner Withdrawal","Equity"],"3286":["Capital - Michael Wingate","Equity"],"3287":["Capital - CurryATX LLC","Equity"],"3288":["Capital - Adam Valenzuela","Equity"],"3289":["Capital - Danielle Famolare","Equity"],"3290":["Capital - Raul S Medellin","Equity"],"3291":["Capital - Miriam Nalumansi","Equity"],"3292":["Capital - John Kroeger","Equity"],"3293":["Capital - Steven R.  Homoky","Equity"],"3294":["Capital - Kevin Jurica","Equity"],"3295":["Capital - Paul Moody","Equity"],"3296":["Capital - Sunil Shah","Equity"],"3297":["Capital - Jawaid Iqbal","Equity"],"3298":["Capital - Vijay Ramamoorthy","Equity"],"3299":["Capital - Nathaniel Reed","Equity"],"3300":["Retained Earnings","Equity"],"3301":["JMB Group LLC (Jason Bartley)","Equity"],"3302":["Steve Rose Properties (Steve Rose)","Equity"],"3303":["Praveen Anamula","Equity"],"3304":["Rajeev Gandhi","Equity"],"3305":["Yung Tao","Equity"],"3306":["Pranav Shah","Equity"],"3307":["Audrey Cheong","Equity"],"3308":["James Kandasamy","Equity"],"3309":["Shih-Fen Tiffany Jen","Equity"],"3310":["Kiran-Cheruku","Equity"],"3311":["Darshan Shah","Equity"],"3312":["Dilip J Patel","Equity"],"3313":["Rajasekhar Pathapati","Equity"],"3314":["Kelly Thompson","Equity"],"3315":["Maple Leaf Capital LLC","Equity"],"3316":["NRK Properties LLC","Equity"],"3317":["Michael Wasserman","Equity"],"3318":["Capital - Nitin Tarte & Suchitra Tarte","Equity"],"3319":["Evens Rodney MD","Equity"],"3320":["Appa Rao Bandi","Equity"],"3321":["Sunil Bhosekar","Equity"],"3322":["Vipul Gopani","Equity"],"3323":["William E Yoder","Equity"],"3324":["Joe M Hernandez","Equity"],"3325":["Cuong Nguyen","Equity"],"3326":["Ron Peterson","Equity"],"3327":["Elaine Schader & Adam Schader","Equity"],"3328":["James Kandasamy","Equity"],"3329":["Aneesh K Mathew","Equity"],"3330":["Anjaneya Dondeti","Equity"],"3331":["Anthony Price","Equity"],"3332":["Arnab Lee legal owner via non-trustwith AET","Equity"],"3333":["Atul Patel(QuestTrustCoFBO Atul Patel IRA#3615411)","Equity"],"3334":["Bernard Carter Fisk Jr","Equity"],"3335":["Sampatti Holding LLC-Series FChandrashekar Nelogal","Equity"],"3336":["Chetan Desai","Equity"],"3337":["Thinking Outside the Box LLC (Chi Yan)","Equity"],"3338":["Chris Toyooka,LegalOwnerViaNonTrustCust. IRAw/AET","Equity"],"3339":["Christian Gehman","Equity"],"3340":["Christie Forgione","Equity"],"3341":["Chun Wang","Equity"],"3342":["Finnigan Holding, LP (Craig Finnigan)","Equity"],"3343":["Dan Ha D. Nguyen","Equity"],"3344":["Darshana Sivakumaran","Equity"],"3345":["Daryl Demanawa","Equity"],"3346":["David Allison","Equity"],"3347":["Eric Oswald","Equity"],"3348":["INFINOVARTIS LLC (Hardik Patel)","Equity"],"3349":["Howard Hinze","Equity"],"3350":["James & Rachel Rainosek","Equity"],"3351":["Jaswant (Nugala) Kumar Krishnamoorthy","Equity"],"3352":["John Grady Sullivan","Equity"],"3353":["Jon Moody EPSP 401k","Equity"],"3354":["Jonathan Krebbs","Equity"],"3355":["Joe Cantu II","Equity"],"3356":["Joseph Barreras","Equity"],"3357":["Joseph J Perry","Equity"],"3358":["Justin Cromartie (Aquasitions Unlimited LLC)","Equity"],"3359":["KAYRIALLC (Karthik Haridoss)","Equity"],"3360":["Quest Trust Company FBO Katrina Moody IRA 3679311","Equity"],"3361":["SBK Asset Management Group LLC","Equity"],"3362":["Kirk Neibert","Equity"],"3363":["Kirk Neibert 401K Trust","Equity"],"3364":["Kumar Chandramoulie","Equity"],"3365":["Kushal Shah","Equity"],"3366":["Lara Nunez","Equity"],"3367":["Manoj V Pulijal","Equity"],"3368":["Mark Wolgin","Equity"],"3369":["Minh Le","Equity"],"3370":["Nathan Nance","Equity"],"3371":["Naveen Maddineni","Equity"],"3372":["Navneet Behl (Oilrox Consulting)","Equity"],"3373":["Nikhil Tarte","Equity"],"3374":["Paras Vaidya","Equity"],"3375":["Patrick Goebel","Equity"],"3376":["Robert Patrick Goebel EPSP 401K","Equity"],"3377":["Pedro Carrazana","Equity"],"3378":["Dan S & Margaret M Pitts Living Trust","Equity"],"3379":["Pratik Pandey","Equity"],"3380":["Raja Cherukuri","Equity"],"3381":["Ramana Korada","Equity"],"3382":["Ravi Shankar Rao","Equity"],"3383":["Raymond Raby","Equity"],"3384":["Roger E Kenyon","Equity"],"3385":["Sai Venkat Avasarala","Equity"],"3386":["Serena Tarte","Equity"],"3387":["Sharon William Koren","Equity"],"3388":["Quest Trust Co FBO(Sunil K Shah) IRA 27462-11","Equity"],"3389":["Quest Trust Co FBO(Pranjali Shah) IRA 27463-11","Equity"],"3390":["Risha Realty LLC (Sureshkumar Raju Rudraraju)","Equity"],"3391":["Umesh Shewalla","Equity"],"3392":["Victor Livingston","Equity"],"3393":["Vivek Sarda","Equity"],"3394":["Quest Trust Co FBO Wanda Croft(IRA #3402621)","Equity"],"3395":["Yung To","Equity"],"3396":["MBNB LLC (Ronald Francis George)","Equity"],"3397":["Wayne Berry","Equity"],"3398":["Himabindu Borra","Equity"],"3399":["Directed Trust Co FBO Rowena Jones Roth IRA","Equity"],"3400":["Capital - Robert Hale","Equity"],"3401":["Capital - Quest IRAInc FBO (Murali Tanniru) IRA","Equity"],"3402":["Capital - John & Diane Sullivan","Equity"],"3403":["Capital - James Harvel","Equity"],"3404":["Capital - Irfan Mohammad","Equity"],"3405":["Capital - Enrique I. Lavintman","Equity"],"3406":["Capital - David Cochran","Equity"],"3407":["Capital - Kelly Ruel Investments LLC","Equity"],"3408":["Capital - Barak Turovsky","Equity"],"3409":["Capital - Devaprakash Ravi","Equity"],"3410":["Capital - Krishnakumar Durairaj and Shankari","Equity"],"3411":["Nathaniel Reed - Owner Payments","Equity"],"3412":["Robert Hale - Owner Payments","Equity"],"3413":["Quest IRAInc FBO (Murali Tanniru) - Owner Payments","Equity"],"3414":["John Grady Sullivan","Equity"],"3415":["James Harvel - Owner Payments","Equity"],"3416":["Irfan Mohammad - Owner Payments","Equity"],"3417":["Enrique I. Lavintman - Owner Payments","Equity"],"3418":["David Cochran - Owner Payments","Equity"],"3419":["Kelly Ruel Investments LLC - Owner Payments","Equity"],"3420":["Barak Turovsky - Owner Payments","Equity"],"3421":["sangeetha Kuppuswami","Equity"],"3422":["Capital - Kim and Paul Hoang","Equity"],"3423":["Capital - Vijayakumar Balasundaram","Equity"],"3424":["Capital - William Thomas and Sherlyn White","Equity"],"3425":["Capital - Edward Loyd","Equity"],"3426":["Capital - Nisha Kadekia and Ravi Khairate","Equity"],"3427":["Capital - Jean-Claude Wilcox","Equity"],"3428":["Capital - Carlos Rodriguez","Equity"],"3429":["Capital - Kiran Cheruku","Equity"],"3430":["Capital - Rory Buckner","Equity"],"3431":["Capital- Pradeep Misrty","Equity"],"3432":["Capital - Zac Ziemianski","Equity"],"3433":["Capital - Cidadela LLC (Janine Luz)","Equity"],"3434":["Capital - COC QRP LLC (Carlos O.)","Equity"],"3435":["Capital - Milana and Dmitriy\u00a0Pokras","Equity"],"3436":["Capital - Karen Hough","Equity"],"3437":["Capital - Masud Kamal","Equity"],"3438":["Capital - Frederick Ryan Lucksinger","Equity"],"3439":["Capital - Jennifer Donovan","Equity"],"3440":["Capital - Mark & Teresa McLaurin","Equity"],"3441":["Capital - Mohammad Ali Rashidi Koochi","Equity"],"3442":["Dimension Investment -Owners Payment","Equity"],"3443":["Xiu Wen Rogers -Owners Payment","Equity"],"3444":["Nitin Jhutani - Owners Payment","Equity"],"3445":["Samuel Luas Jobe - Owners Payment","Equity"],"3446":["BGT Homes LLC - Owners Payment","Equity"],"3447":["Justin Rostant - Owners Payment","Equity"],"3448":["Kyle Kovats - Owners Payment","Equity"],"3449":["Jeyasankaran Ragouvaran - Owners Payment","Equity"],"3450":["Capital- Darshan Shah","Equity"],"3451":["Capital- DILIP J PATEL","Equity"],"3452":["Capital- RAJASEKHAR PATHAPATI","Equity"],"3453":["Capital-  KELLY THOMPSON","Equity"],"3454":["Capital - MAPLE LEAF CAPITAL LLC","Equity"],"3455":["Capital- NRK PROPERTIES LLC","Equity"],"3456":["Capital- MICHAEL WASSERMAN","Equity"],"3457":["Capital - Nitin Tarte and Suchitra Tarte","Equity"],"3458":["Capital - Evens Rodney MD","Equity"],"3459":["Capital - APPA RAO BANDI","Equity"],"3460":["Capital - SUNIL BHOSEKAR","Equity"],"3461":["Capital - Vipul Gopani","Equity"],"3462":["Capital -JMB GROUP LLC","Equity"],"3463":["Capital -WILLIAM E YODER","Equity"],"3464":["Capital - Praveen Anamula","Equity"],"3465":["Capital -JOE M. HERNANDEZ","Equity"],"3466":["Capital -Cuong Nguyen","Equity"],"3467":["Libad LLC - Owners Payment","Equity"],"3468":["Cidadela LLC - Owners Payment","Equity"],"3469":["William Brent James - Owners Payment","Equity"],"3470":["Capital- Ron Peterson","Equity"],"3471":["Capital-ELAINE SCHADER & ADAM SCHADER","Equity"],"3472":["Gravy Levy - Owners Payment","Equity"],"3473":["3D Group Inc 401K","Equity"],"3474":["Dan Swayne - Owners Payment","Equity"],"3475":["Chakkera Family - Owners Payment","Equity"],"3476":["Milana Pokras and Dmitrly Pokras - Owners Payment","Equity"],"3477":["Muru Venkat (Trisys Solo 401kTrustFBO Muru Venkat)","Equity"],"3478":["Capital-S Vavilikolanu","Equity"],"3479":["Capital - Usharani Maddineni","Equity"],"3480":["Capital - Island Peak Group LLC","Equity"],"3481":["Capital - Rowena Jones","Equity"],"3482":["Capital - Madhavi Koneru","Equity"],"3483":["Capital - Ramprabhu Ratnam","Equity"],"3484":["Capital - Nick Tarte","Equity"],"3485":["Capital - Sam Rebello","Equity"],"3486":["Capital - Nicholas Okoronkwo","Equity"],"3487":["Capital - Keval Shah","Equity"],"3488":["Capital - Omar Gonzalez","Equity"],"3489":["Capital - Uriel Bach","Equity"],"3490":["Capital - Sandeep Mashru","Equity"],"3491":["Capital - Vineet Sarda","Equity"],"3492":["Capital - Joe Sauers","Equity"],"3493":["Capital - James Wenzel","Equity"],"3494":["Capital - Abhijeet Kolpekwar","Equity"],"3495":["Capital - Rahul Patel","Equity"],"3496":["Capital-Chibuzor Nnaji","Equity"],"3497":["Capital-Joseph Ho","Equity"],"3498":["Capital-Niharika Medavaram","Equity"],"3499":["Miscellaneous Investors","Equity"],"3500":["Personal Draw","Equity"],"3501":["Capital - AEIS","Equity"],"3502":["Capital - Astute Consulting","Equity"],"3503":["Capital-Jahnavi Bheemreddy","Equity"],"3504":["PhaniAlturi and Vernksd","Equity"],"3515":["Kyle Burford","Equity"],"3516":["Steven Suh","Equity"],"3517":["Collin Duffield","Equity"],"3518":["Veneet Sarda","Equity"],"3519":["Venkat Yadha","Equity"],"3520":["Veer Karri","Equity"],"3521":["Yan Yan","Equity"],"3522":["Timothy Patricia Saunders","Equity"],"3523":["Sreeram Vadlamani","Equity"],"3524":["Carrie Young","Equity"],"3525":["Kishore Kankipati","Equity"],"3526":["Rahul Patel","Equity"],"3527":["Dillip Subramani","Equity"],"3528":["Guruprasad Rao","Equity"],"3529":["Keval Shah","Equity"],"3530":["Gourab Goyal","Equity"],"3531":["Shobharani Tatineni","Equity"],"3532":["Santosh Upadhya","Equity"],"3580":["Amit Patel - Owner Distribution","Equity"],"3581":["SBK Kelley Simmonds","Equity"],"3582":["John Monteiro - Distribution","Equity"],"3596":["Capital - ROCO Food Mgmt LLC","Equity"],"3597":["Capital - MKS Capitol LLC (M. Shah)","Equity"],"3598":["Capital - Susan Huang Choi","Equity"],"3599":["Capital - Harshi Patel","Equity"],"3600":["Capital - Alan Peroutek","Equity"],"3601":["Capital-Aleksandr Levin","Equity"],"3602":["Capital-Chandrashekar Nelogal","Equity"],"3603":["Capital-David Hruzek","Equity"],"3604":["Capital-David Thorpe","Equity"],"3605":["Capital-Joseph Anthony Izzo Jr.","Equity"],"3606":["Capital-Joe Fang","Equity"],"3607":["Capital-Kent Lau","Equity"],"3608":["Capital-Lori Brown","Equity"],"3609":["Capital - Melanie Cangemi (Noonan)","Equity"],"3610":["Capital-Robert Lemcke Jr. EPSP 401K","Equity"],"3611":["Capital - William Hong","Equity"],"3612":["Capital-Jenna Stuart Yoder IRA","Equity"],"3613":["Capital-Gomathi Shankar and Anitha Shankar","Equity"],"3614":["Capital-Paul Hoang EPSP 401K","Equity"],"3615":["Capital-Steven Sullivan","Equity"],"3616":["Capital-Scott Lewis","Equity"],"3617":["Capital-Pandey Investments LLC Saurav Pandey","Equity"],"3618":["Capital-Kristen Johnson","Equity"],"3619":["Capital-DACS LLC (Samuel Martin)","Equity"],"3620":["Capital - Jesse Earl Gilpin","Equity"],"3621":["Capital-Amit Goyal","Equity"],"3622":["Capital-Cynthia Cantu","Equity"],"3623":["Capital - Ravi Botla","Equity"],"3624":["Capital - David Matzke","Equity"],"3625":["Capital-Nitisha Shyam Sharma","Equity"],"3626":["Capital-Vanaja Kethireddy (Naveen Malladi)","Equity"],"3627":["Capital - Gary Leva (GC Leva Trust)","Equity"],"3628":["Capital-Fortune SA Investments LLC","Equity"],"3629":["Capital-Pillar Point 002 LLC (Jay Personius)","Equity"],"3630":["Capital-Joseph Fang","Equity"],"3631":["Capital - Pramesh Dhakal","Equity"],"3632":["Capital - Raghava Reddy Vennam","Equity"],"3633":["Capital-Rajesekhar Bora","Equity"],"3634":["Capital- Rajiv Barutula","Equity"],"3635":["Capital - Rajiv Paudel","Equity"],"3636":["Capital-Codell Investments, LLC   Regan Gradke","Equity"],"3637":["Capital- Shariyun Lawson","Equity"],"3638":["Capital - Sri Hari","Equity"],"3639":["Capital- Sridhar Beeram","Equity"],"3640":["Capital-Restate LLC (Sunil Singh)","Equity"],"3641":["Capital-SKBA Investments LLC (Suresh Kota)","Equity"],"3642":["Capital - Bijo John","Equity"],"3643":["Capital - William Hong","Equity"],"3644":["Capital-Shashank Anamula","Equity"],"3645":["Capital-Quest Trust Company FBO Paul Moody IRA","Equity"],"3646":["Capital-Quest Trust Company  FBO Vikram Jayaram","Equity"],"3647":["Capital-Quest Trust Company FBO Praveen Anamula","Equity"],"3649":["Restate LLC (Sunil Singh)-Owner Payment","Equity"],"3654":["Quest Trust Company FBO Paul Moody-Owner Payment","Equity"],"3700":["Pradeep Mistry - Owner Payment","Equity"],"3760":["Sandeep Mashru - Owner Payment","Equity"],"3777":["Samvriddhi Snr Home Care LLC (Arun Achamkulamgara)","Equity"],"3778":["Bill Bebee","Equity"],"3779":["Arun Mukherjee","Equity"],"3780":["Christian Iborrola - Owners Payment","Equity"],"3781":["Ramprabhu Ratnam","Equity"],"3782":["Srikanth R Billa - Owners Payment","Equity"],"3783":["Chris Foret - Owners Payment","Equity"],"3784":["Diana Jelen - Owners Payment","Equity"],"3785":["RedBrick Solution - Owners Payment","Equity"],"3786":["JMB Group LLC - Owners Payment","Equity"],"3787":["Randall L Shussler - Owners Payment","Equity"],"3788":["Sampati Holdings LLC -Owners Payment","Equity"],"3789":["Uptime Investment - Owners Payment","Equity"],"3790":["Craig Scott - Owners Payment","Equity"],"3791":["Michael L Soulek & Susan E Soulek - Owners Payment","Equity"],"3792":["Masud Kamal- OwnerPayment","Equity"],"3793":["The Buckman Family Trust -Owner payment","Equity"],"3794":["Alex K dayrit- Owner payment","Equity"],"3795":["Jacques Lesage- Owner Payment","Equity"],"3796":["Equity Trust Company Sree- - owner payment","Equity"],"3797":["Satya Perkari- Owner payment","Equity"],"3798":["Franklin Hldings Family Ltd-Jean C- owner payment","Equity"],"3799":["Mark McLaurin- Owner payment","Equity"],"3800":["Double X Investments LLC (Adam Valunzue)- Owner","Equity"],"3801":["Alias Shaik- Owners Payment","Equity"],"3802":["Ventkatram R Pakala- Owner payment","Equity"],"3803":["Nitin Tarte and Suchitra Tarte-owner payment","Equity"],"3804":["Danairmotive (Dan and Karin Tucker)- Owner Payment","Equity"],"3805":["Heath A Sumrow- Owner Payment","Equity"],"3806":["James Preston Coleman- Owner payment","Equity"],"3807":["Alynab Business LLC (Nadir Makani)- Owner payment","Equity"],"3808":["L7Real Estate Investors LLC- Owner payment","Equity"],"3809":["Alan Peroutek-Owner Payment","Equity"],"3810":["Alexsandr Lewin-Owner Payment","Equity"],"3811":["Chandrashekar Nelogal -Owner Payment","Equity"],"3812":["David Hruzek-Owner Payment","Equity"],"3813":["David Thorpe-Owner Payment","Equity"],"3814":["Joseph Anthony Izzo Jr.-Owner Payment","Equity"],"3815":["Joe Fang-Owner Payment","Equity"],"3816":["Kent Lau-Owner Payment","Equity"],"3817":["Lori Brown-Owner Payment","Equity"],"3818":["Melanie Cangemi Noonan (Beach Resources Inc.)","Equity"],"3819":["Robert Lemcke Jr. EPSP 401K-Owner Payment","Equity"],"3820":["William Hong","Equity"],"3821":["Jenna Stuart Yoder IRA - Owner Payment","Equity"],"3822":["Gomathi Shankar and Anitha Shankar-Owner Payment","Equity"],"3823":["Paul Hoang EPSP 401K-Owner Payment","Equity"],"3824":["Steven Sullivan-Owner Payment","Equity"],"3825":["Scott Lewis-Owner Payment","Equity"],"3826":["Pandey Investments LLC Saurav Pandey-Owner Payment","Equity"],"3827":["Kristen Johnson-Owner Payment","Equity"],"3828":["DACS LLC (Samuel Martin)-Owner Payment","Equity"],"3829":["Jesse Earl Gilpin","Equity"],"3830":["Amit Goyal-Owner Payment","Equity"],"3831":["Cynthia Cantu-Owner Payment","Equity"],"3832":["Ravi Botla","Equity"],"3833":["David Matzke","Equity"],"3834":["Nitisha Shyam Sharma-Owner Payment","Equity"],"3835":["Vanaja Kethireddy (Naveen Malladi)-Owner Payment","Equity"],"3836":["Gary Leva (GC Leva Trust)","Equity"],"3837":["Fortune SA Investments LLC-Owner Payment","Equity"],"3838":["Pillar Point 002 LLC (Jay Personius)-Owner Payment","Equity"],"3839":["Joseph Fang-Owner Payment","Equity"],"3840":["Pramesh Dhakal","Equity"],"3841":["Raghava Reddy Vennam (Astute Consulting)","Equity"],"3842":["Rajesekhar Bora-Owner Payment","Equity"],"3843":["Rajiv Barutula","Equity"],"3844":["Rajiv Paudel","Equity"],"3845":["Codell Investments LLC Regan Gradke- Owner Payment","Equity"],"3846":["Shariyun Lawson-Owner Payment","Equity"],"3847":["Sri Hari (SAI Estates, LLC)","Equity"],"3848":["Sridhar Beeram-Owner Payment","Equity"],"3850":["SKBA Investments LLC (Suresh Kota)-Owner Payment","Equity"],"3851":["Bijo John (ABJ Holdings LLC)","Equity"],"3852":["William Hong","Equity"],"3853":["Shashank Anamula-Owner PAyment","Equity"],"3855":["Quest Trust Company FBO Vikram Jayaram-Owner Payme","Equity"],"3856":["Quest Trust Company FBO Praveen Anamula-Owner Paym","Equity"],"3857":["Equity Trust Company Krupal-Owner payment","Equity"],"3858":["Mahipal Jannapureddy- Owner payments","Equity"],"3859":["Michael Hoang- Owners payment","Equity"],"3860":["Michelle Hoang- owner payment","Equity"],"3861":["Zac Ziemianski-Owner Payment","Equity"],"3862":["COC QRP LLC (Carlos O.)-Owner payment","Equity"],"3863":["Charles J. Zanetti Revocable Trust- owner payment","Equity"],"3864":["Ron and Ginny -owner payment","Equity"],"3865":["Jennifer Donovan-owner payment","Equity"],"3866":["Frederick Ryan Lucksinger","Equity"],"3867":["Karen Hough-Owner payment","Equity"],"3868":["Mohammad Ali Rashidi Koochi","Equity"],"3869":["Teresa and Mark McLaurin","Equity"],"3875":["Sethuraj Palaniappa","Equity"],"3878":["Vince Bertucci - Distribution","Equity"],"3879":["Gabriel Bietz - Distribution","Equity"],"3880":["Mark Calhoun","Equity"],"3881":["Greg Meier","Equity"],"3882":["David Schmidt","Equity"],"3883":["Madhavi Koneru","Equity"],"3884":["Lisa Yoo","Equity"],"3885":["Abhijeet Kolpekwar","Equity"],"3886":["Hema Kishore Chapala","Equity"],"3887":["Stone Antonio","Equity"],"3888":["Uriel Bach","Equity"],"3889":["Vinaya Gogineni","Equity"],"3890":["Vijay Parbhakaran","Equity"],"3892":["John Spearman - Distribution","Equity"],"3893":["Jay Amin - Distribution","Equity"],"3894":["Prathap Reddy Tumilla","Equity"],"3895":["Chris Semasko","Equity"],"3896":["Seshu Vavilikolanu","Equity"],"3897":["Omar Gonzalez","Equity"],"3898":["Nandakumar Pothapu Reddy","Equity"],"3899":["Elvis Rodricks","Equity"],"3900":["Nicholas Okoronkwo","Equity"],"3901":["Capital - Amit Patel","Equity"],"3902":["Capital - Aneesh K Mathew","Equity"],"3903":["Capital - Anjaneya Dondeti","Equity"],"3904":["Capital - Anthony Price","Equity"],"3905":["Capital-Arnab Lee legal ownr via AET Arnab Lee","Equity"],"3906":["Capital - Atul Patel(QuestTrustCoFBO IRA #3615411)","Equity"],"3907":["Capital - Bernard Carter Fisk Jr","Equity"],"3908":["Capital - Sampatti Holdings LLC - Series F (Chand","Equity"],"3909":["Capital - John Grady Sullivan","Equity"],"3910":["Capital - Chetan Desai","Equity"],"3911":["Capital - Thinking Outside the Box LLC (Chi Yan)","Equity"],"3912":["Capital - Chris Toyooka, lg owner via nontrust IRA","Equity"],"3913":["Capital - Christian Gehman","Equity"],"3914":["Capital - Christi Forgione","Equity"],"3915":["Capital - Chun Wang","Equity"],"3916":["Capital - Finnigan Holdings, LP (Craig Finnigan)","Equity"],"3917":["Capital - Dan Ha D. Nguyen","Equity"],"3918":["Capital - Darshana Sikakumaran","Equity"],"3919":["Capital - Daryl Demanawa","Equity"],"3920":["Capital - David Allison","Equity"],"3921":["Capital - Eric Oswald","Equity"],"3922":["Capital - INFINOVARTIS LLC (Hardik Patel)","Equity"],"3923":["Capital - Howard Hinze","Equity"],"3924":["Capital - James & Rachel Rainosek","Equity"],"3925":["Capital - Jaswant (Nugala) Kumar Krishnamoorthy","Equity"],"3926":["Capital - Jon Moody EPSP 401k","Equity"],"3927":["Capital - Jonathan Krebbs","Equity"],"3928":["Capital - Joe Cantu II","Equity"],"3929":["Capital - Joseph Barreras","Equity"],"3930":["Capital - Joseph J Perry","Equity"],"3931":["Capital - Justin Cromartie","Equity"],"3932":["Capital - KAYRIA LLC (Karthik Haridoss","Equity"],"3933":["Capital-QuestTrustCo FBO Katrina Moody IRA 3679311","Equity"],"3934":["Capital-SBK AssetMngmtGroup, LLC (Kelley Simmonds)","Equity"],"3935":["Capital - Kirk Neibert","Equity"],"3936":["Capital - Kirk Neibert 401K Trust","Equity"],"3937":["Capital - Kumar Chandramoulie","Equity"],"3938":["Capital - Kushal Shah","Equity"],"3939":["Capital - Lara Nunez","Equity"],"3940":["Capital - Manoj V Pulijal","Equity"],"3941":["Capital - Mark Wolgin","Equity"],"3942":["Capital - Minh Le","Equity"],"3943":["Capital - Nathan Nance","Equity"],"3944":["Capital - Naveen Maddineni","Equity"],"3945":["Capital - Navneet Behl","Equity"],"3946":["Capital - Nikhil Tarte","Equity"],"3947":["Capital - Paras Vaidya","Equity"],"3948":["Capital - Patrick Goebel","Equity"],"3949":["Capital - Robert Patrick Goebel EPSP 401K","Equity"],"3950":["Capital - Pedro Carrazana","Equity"],"3951":["Capital - Dan S & Margaret M Pitts Living Trust","Equity"],"3952":["Capital - Pratik Pandey","Equity"],"3953":["Capital - Raja Cherukuri","Equity"],"3954":["Capital - Ramana Korada","Equity"],"3955":["Capital - Ravi Shankar Rao","Equity"],"3956":["Capital - Raymond Raby","Equity"],"3957":["Capital - Roger E Kenyon","Equity"],"3958":["Capital - Sai Venkat Avasarala","Equity"],"3959":["Capital - Serena Tarte","Equity"],"3960":["Capital - Sharon William Koren","Equity"],"3961":["Capital-QuestTrustCo FBO(Sunil K Shah)IRA 27462-11","Equity"],"3962":["Capital-QuestTrustCo FBO(Pranjali Shah(IRA27463-11","Equity"],"3963":["Capital-RishaRealtyLLC(Sureshkumar Raju Rudraraju)","Equity"],"3964":["Capital - Umesh Shewalla","Equity"],"3965":["Capital - Victor Livingston","Equity"],"3966":["Capital - Vivek Sarda","Equity"],"3967":["Capital-QuestTrustCo FBO Wanda Croft(IRA #3402621)","Equity"],"3968":["Capital - Yung To","Equity"],"3969":["Capital - MBNB LLC (Ronald Francis George)","Equity"],"3970":["Capital - Wayne Berry","Equity"],"3971":["Capital - Himabindu Borra","Equity"],"3972":["Capital-DirectedTrustCo FBO Rowene Jones Roth IRA","Equity"],"3973":["Cap-SamvriddhiSenHmCare LLC(Arun Achamkulamgara)","Equity"],"3974":["Capital - Bill Bebee","Equity"],"3975":["Capital - Arun Mukherjee","Equity"],"3976":["Capital - Chris Jameson","Equity"],"3977":["Capital - James Preston Coleman V (IRA Acct Hold)","Equity"],"3978":["Chris Jameson (The Jameson Group)","Equity"],"3979":["James Preston Coleman V (IRA Acct Hold)","Equity"],"3980":["Capital - Ramprabhu Rathnam","Equity"],"3981":["Miriam Kudiza","Equity"],"3982":["Miriam Kudiza - Owner Payment","Equity"],"3983":["James Wenzel - Distribution","Equity"],"3984":["Raghu Gupta","Equity"],"3985":["Richard OBrien","Equity"],"3986":["Madhu Badireddy","Equity"],"3987":["Ruchi Agrawal","Equity"],"3988":["Sam Rebello","Equity"],"3989":["Anand Puttaswamy","Equity"],"3990":["Audie Clark - Distribution","Equity"],"3991":["Sreeram Akella  401K","Equity"],"3992":["Alex Levin 401K - Distribution","Equity"],"3993":["Venkatram Pakala - Distribution","Equity"],"3994":["Alynab Business Nadir Makani","Equity"],"3995":["Viv Wen Rogers -Distribution","Equity"],"3996":["Mahipal Jannapureddy - Distribution","Equity"],"3997":["Hanis Thomas - Distribution","Equity"],"3998":["Satya Perkari - Distribution","Equity"],"3999":["Nicholas Olenec","Equity"],"4000":["Net Rental Income","Income"],"4005":["Rental Income","Income"],"4006":["Short Term Rental Income","Income"],"4010":["Gross Potential Rent","Income"],"4020":["Loss/Gain To Lease","Income"],"4035":["Bad Debt/Write-Off Uncollectable Rent","Income"],"4040":["Vacancy Loss","Income"],"4050":["Less Model/Shop Unit","Income"],"4055":["Move in concession","Income"],"4060":["Concession Or Move In Special","Income"],"4065":["Down Units","Income"],"4070":["Courtesy Patrol Concession","Income"],"4100":["Other Income","Income"],"4101":["Ownership Payroll","Income"],"4102":["Washer Dryer Rental Income","Income"],"4103":["Internet Revenue","Income"],"4105":["Accelerated Rent","Income"],"4110":["Application Fees","Income"],"4115":["Administrative Fees","Income"],"4116":["Amenity Fee","Income"],"4117":["Parcel Lockers","Income"],"4120":["Bad Debt Recovery/Select Deposit","Income"],"4140":["Damages & Cleaning Charges","Income"],"4145":["Security Deposit Forfeiture","Income"],"4150":["Eviction & Court Related Fees","Income"],"4155":["Insufficient Notice Penalty","Income"],"4160":["Key & Lock Fee","Income"],"4165":["Late Fees","Income"],"4170":["Lease Termination Fees","Income"],"4175":["Month to Month Premium","Income"],"4180":["NSF Check Fee","Income"],"4183":["Pet Fee Deposits","Income"],"4185":["Pet Fees Nonrefundable","Income"],"4187":["Pet Rent","Income"],"4190":["Re-Let Fees","Income"],"4193":["ePremium","Income"],"4194":["Pest Control Income","Income"],"4195":["Transfer Fees","Income"],"4198":["Service & Utilities Trash Income","Income"],"4199":["Credit Builder Income","Income"],"4200":["Utility Reimbursement Income","Income"],"4210":["Electric Income","Income"],"4211":["Property Taxes & Other Reimbursement","Other Income"],"4240":["Water/Sewer RUBs","Income"],"4242":["Stormwater Fee","Income"],"4250":["Gas Income","Income"],"4260":["Util. Bill. Fees Income","Income"],"4270":["Vacant Service Fees Income","Income"],"4300":["Other Income","Income"],"4301":["Gain/Loss on Sale of Asset","Income"],"4302":["Sale of Property","Income"],"4305":["Reletting Fee","Income"],"4307":["RISK","Income"],"4310":["Interest Income","Income"],"4320":["Laundry Income","Income"],"4330":["Cable Charge","Income"],"4331":["Amenity Fee","Income"],"4335":["Internet Income","Income"],"4340":["Conservice Income","Income"],"4350":["Insurance Claim Income","Other Income"],"4360":["Storage Income","Income"],"4370":["Covered Parking","Income"],"4375":["Assigned Parking","Income"],"4380":["Vending Commission","Income"],"4385":["Garage Fees","Income"],"4390":["BillBoard Income","Income"],"4391":["Property Management Income","Other Income"],"4392":["Asset Management Fee Income","Other Income"],"4395":["Community Room Rental","Income"],"4399":["Other Income","Income"],"5000":["Payroll Expenses","Expense"],"5005":["Corporate Payroll","Expense"],"5006":["Accounting Payroll","Expense"],"5007":["Executive Payroll","Expense"],"5008":["Achieve Academy Payroll","Expense"],"5009":["SAI Payroll","Expense"],"5010":["Property Manager Payroll","Expense"],"5015":["Payroll Miscellaneous Expense","Expense"],"5020":["Maintenance and Housekeeping Payroll","Expense"],"5021":["Leasing & Office Payroll","Expense"],"5022":["EPSL - Covid-19 Pay","Expense"],"5023":["Employee Rent/Concession/","Expense"],"5025":["Payroll Bonuses","Expense"],"5030":["Payroll Commission Bonus","Expense"],"5035":["Salary Expense - Tip","Expense"],"5040":["Payroll Taxes Expense","Expense"],"5050":["Reimbursement Expenses","Expense"],"5060":["Payroll Service and Admin Expenses","Expense"],"5070":["Worker Compensation Insurance","Expense"],"5075":["Health Insurance Expenses","Expense"],"5080":["Contract Maintenance Staff/Temp.","Expense"],"5082":["Contract Office and Admin Labor","Expense"],"5085":["Other Contract Labor","Expense"],"5090":["Drug Test","Expense"],"5200":["Monthly Contract Expense","Expense"],"5205":["T/C Cleaning Contractors","Expense"],"5210":["DO NOT USE Flooring Contract Services","Expense"],"5215":["DO NOT USE Gen Maint & Repairs Contracted Services","Expense"],"5220":["Monthly HVAC Contract Services -   do not use","Expense"],"5225":["Monthly Elevator","Expense"],"5230":["Monthly Grounds/Landscaping Maintenance","Expense"],"5235":["Monthly Pool Expense","Expense"],"5240":["T/C Painting Contractors","Expense"],"5245":["Monthly Water Softner  (Salt) Mueller","Expense"],"5250":["Monthly Pest Control","Expense"],"5255":["Use 5505 Monthly Telephone/Internet","Expense"],"5260":["R/M Plumbing Contract Services","Expense"],"5265":["Renovation Contracted Services","Expense"],"5270":["Resurfacing Contract Services","Expense"],"5285":["Monthly Courtesy Patrol","Expense"],"5289":["Loan from Hutchins","Other Current Liability"],"5300":["Turnover Cost-Rubs","Expense"],"5305":["T/C Painting Supplies","Expense"],"5306":["T/C Blinds","Expense"],"5307":["DO NOT USE Turnover Materials","Expense"],"5308":["DO NOT USE Cleaning - Turnover","Expense"],"5310":["T/C Plumbing Supplies","Expense"],"5315":["T/C Flooring Repairs","Expense"],"5318":["T/C Carpet Cleaning","Expense"],"5320":["DO NOT USE Kitchen","Expense"],"5325":["T/C Drywall","Expense"],"5328":["T/C Counter & Tub Resurfacing","Expense"],"5330":["T/C Appliance Parts & Repairs","Expense"],"5335":["T/C Make-Ready Cleaning","Expense"],"5336":["T/C  Flooring Replacement","Expense"],"5337":["T/C Light Fixtures & Ceiling Fans","Expense"],"5340":["T/C Make Ready","Expense"],"5345":["T/C Trash Outs","Expense"],"5350":["T/C Cleaning Supplies","Expense"],"5355":["T/C Doors, Cabinets & Related Hardware Repairs","Expense"],"5400":["Repairs and Maintenance","Expense"],"5405":["R/M Appliance Supplies","Expense"],"5410":["R/M Balcony and Deck Repairs","Expense"],"5411":["R/M Keys/Locks","Expense"],"5420":["T/C Doors, Cabinets & Related Hardware Repairs","Expense"],"5425":["R/M Electrical Repairs","Expense"],"5430":["R/M Flooring Repairs","Expense"],"5436":["R/M General Operating Repairs & Supplies","Expense"],"5437":["R/M Pool Supplies","Expense"],"5438":["Inspection Costs","Expense"],"5440":["R/M Glass, Mirror,Screens","Expense"],"5445":["R/M HVAC Supplies","Expense"],"5446":["R/M HVAC Contract","Expense"],"5450":["R/M Lighting/Electrical Supplies","Expense"],"5455":["R/M Painting and Resurfacing Repairs","Expense"],"5460":["R/M Parking Lot and Sidewalk Repairs","Expense"],"5465":["R/M Pest Control Supplies","Expense"],"5470":["R/M Plumbing Supplies","Expense"],"5471":["R/M Plumbing Contract","Expense"],"5475":["R/M Signage and Fence Repairs","Expense"],"5478":["R/M Roofing Contract Services","Expense"],"5480":["R/M Window Coverings Repairs and Maintenance","Expense"],"5485":["R/M Fire Safety","Expense"],"5490":["R / M Golf Cart Maintenance","Expense"],"5495":["R/M  Repairs & Maint Tools & Supplies","Expense"],"5500":["Service and Utility Expenses","Expense"],"5505":["Monthly Telephone/Internet","Expense"],"5510":["Utilities Electricity - Common Areas","Expense"],"5515":["Utilities - Vacant Electric","Expense"],"5516":["Vacant - Gas","Expense"],"5520":["Utilities Gas Expense","Expense"],"5525":["Washer & Dryer Rent","Expense"],"5530":["Trash Collection","Expense"],"5535":["Utility Billing Service Fees","Expense"],"5538":["don't use","Expense"],"5540":["Utilities Water/Sewer Expense","Expense"],"5545":["Water Expense","Expense"],"5550":["Sewer Expense","Expense"],"5555":["Monthly Resident Liability insurance","Expense"],"5600":["Marketing and Advertising","Expense"],"5610":["M/A Banners/Signs/Flyers","Expense"],"5615":["M/A Marketing Costs/Brochures/Business/Name Cards","Expense"],"5620":["M/A Brochures and Printing","Expense"],"5625":["Admin EXP New Hire","Expense"],"5630":["M/A Locator Services","Expense"],"5635":["M/A Resident functions/Promotions","Expense"],"5640":["M/A Advertising/Website Expenses","Expense"],"5645":["M/A Resident Referrals","Expense"],"5700":["Lease Administration Expenses","Expense"],"5710":["Admin Exp Blue Moon Leases Expense","Expense"],"5720":["Admin Exp Collections Expense","Expense"],"5730":["Admin Exp Eviction and Court Related Fees","Expense"],"5740":["Admin Exp Writ Expense","Expense"],"5750":["Admin Exp Tenant Screening","Expense"],"5760":["Admin Credit Builder Expense","Expense"],"5800":["Brokerage & Commission","Expense"],"5810":["Charitable Contributions","Expense"],"5820":["Admin Exp Dues and Subscription","Expense"],"5830":["Gifts","Expense"],"5900":["5700 - 5900 Administrative Expenses","Expense"],"5901":["Admin Exp Resident Referral Fees","Expense"],"5905":["Administrative Costs","Expense"],"5906":["Payroll Fees (ADP)","Expense"],"5910":["Admin Exp Association Dues/Inspections/Permits","Expense"],"5911":["Admin Exp Dues & Subscription","Expense"],"5912":["Admin Exp Education/Meetings/Seminars","Expense"],"5913":["Admin Exp Uniforms","Expense"],"5915":["Admin Exp Auto and Travel Expenses","Expense"],"5920":["Admin Exp Bank Charges and Fees","Expense"],"5921":["Late Fees","Expense"],"5922":["Interest Expense","Expense"],"5925":["Admin Exp  Software and Computer Expenses","Expense"],"5930":["Admin Exp Licenses and Permits","Expense"],"5935":["Admin Exp Meals and Entertainment (Staff)","Expense"],"5940":["Monthly Office Furniture/Equipment","Expense"],"5941":["Office Space Rental","Expense"],"5944":["DO NOT USE Pool Phone","Expense"],"5945":["Admin Exp Office Supplies","Expense"],"5946":["Single Family Expense","Expense"],"5950":["Admin Exp Postage and Delivery","Expense"],"5953":["Monthly Fire/ Security Alarm Monitoring","Expense"],"5954":["Monthly Pool Emergency Phones Kings III","Expense"],"5955":["Do not Use Telephone Expenses","Expense"],"5956":["R/M Maintenance Gas","Expense"],"5960":["Monthly Professional Management Fee","Expense"],"5965":["SAHA Charge Back","Expense"],"5970":["Monthly Answering Services","Expense"],"5980":["Monthly Pool Expense","Expense"],"5981":["Admin Exp Parking Reimbursement","Expense"],"5982":["Round Off","Expense"],"5983":["Admin Exp Drug Screening","Expense"],"5984":["IRS Levy","Expense"],"5985":["Monthly Water Softner  (Salt) Mueller","Expense"],"6000":["Accounting, Legal and Insurance","Expense"],"6010":["Accounting Fees - Property","Expense"],"6020":["Legal Fees - Property","Expense"],"6025":["General Liability Insurance","Expense"],"6030":["Property Insurance","Expense"],"6040":["Accrued Reserve","Other Current Asset"],"6300":["Taxes","Expense"],"6310":["Property Taxes","Expense"],"6330":["Tax Protest Fees","Expense"],"6400":["Capital Expenditures","Non-Operating Expense"],"6410":["Mortgage Expenses","Non-Operating Expense"],"6420":["Mortgage Interest Expense","Non-Operating Expense"],"6421":["Reserves Due","Non-Operating Expense"],"6422":["Third Party Loan Interest","Non-Operating Expense"],"6425":["Rate Cap Interest","Non-Operating Expense"],"6430":["Mortgage processing fees","Non-Operating Expense"],"6435":["Excess Cash Reserve","Non-Operating Expense"],"6440":["Startup cost/Prior Year Expenses","Non-Operating Expense"],"6450":["Mortgage Income","Income"],"6455":["Mortgage Interest Rate Cap Payment","Income"],"6500":["Non-Operating Admin Costs","Non-Operating Expense"],"6510":["Accounting Fees (Company)","Non-Operating Expense"],"6515":["Investor Relations","Non-Operating Expense"],"6520":["Asset Management Fee","Non-Operating Expense"],"6525":["Employee Incentives","Non-Operating Expense"],"6526":["Lease up/Marketing","Non-Operating Expense"],"6530":["Project Management Fee","Non-Operating Expense"],"6535":["Salado Creek Fire Restoration","Non-Operating Expense"],"6540":["Refinance Expenses","Non-Operating Expense"],"6550":["Accounting Use  - Seven Oaks Future Chargeback","Non-Operating Expense"],"6600":["Depreciation & Amortization","Non-Operating Expense"],"6610":["Amortization Expense (done once yrly)","Non-Operating Expense"],"6620":["Depreciation Expense(done 1x yrly)","Non-Operating Expense"],"6700":["Capital Rehab Costs","Non-Operating Expense"],"6701":["DO NOT USE Appliances","Non-Operating Expense"],"6703":["DO NOT USE Blinds-Wallpaper","Non-Operating Expense"],"6705":["DO NOT USE Building Rehab","Non-Operating Expense"],"6707":["Crown Moulding","Non-Operating Expense"],"6710":["Ceiling Fans/Light Fixtures","Non-Operating Expense"],"6712":["Exterior Improvements","Non-Operating Expense"],"6715":["DO NOT USE Floors & Carpets","Non-Operating Expense"],"6717":["Furniture","Non-Operating Expense"],"6720":["DO NOT USE HVAC Improvements","Non-Operating Expense"],"6730":["DO NOT USE Landscaping","Non-Operating Expense"],"6735":["DO NOT USE Paint & Carpentry","Non-Operating Expense"],"6740":["DO NOT USE Plumbing","Non-Operating Expense"],"6750":["DO NOT USE Security Systems and Monitoring","Non-Operating Expense"],"6800":["Taxes","Non-Operating Expense"],"6810":["Partnership Taxes","Non-Operating Expense"],"6820":["Franchise Tax","Non-Operating Expense"],"6830":["Insurance Receipts","Non-Operating Expense"],"6877":["Expenses prior years","Non-Operating Expense"],"6900":["Capital Expenditure","Non-Operating Expense"],"6910":["Capital Expenditure","Expense"],"6920":["Interior Designing fee","Expense"],"7010":["Cost of Property","Expense"],"7020":["Closing Cost","Expense"],"8000":["Deposits in Transit","Other Current Asset"],"8001":["Ask your accountant","Other Expense"],"8002":["Held Funds","Other Current Asset"],"9001":["DELETED ACCOUNT","Non-Operating Expense"],"9002":["DELETED ACCOUNT","Non-Operating Expense"],"9003":["DELETED ACCOUNT","Non-Operating Expense"],"9004":["DELETED ACCOUNT","Non-Operating Expense"],"9005":["DELETED ACCOUNT","Non-Operating Expense"],"9006":["DELETED ACCOUNT","Non-Operating Expense"],"9007":["DELETED ACCOUNT","Non-Operating Expense"],"9008":["DELETED ACCOUNT","Non-Operating Expense"],"9009":["DELETED ACCOUNT","Non-Operating Expense"],"9010":["DELETED ACCOUNT","Non-Operating Expense"],"9011":["DELETED ACCOUNT","Non-Operating Expense"],"9012":["DELETED ACCOUNT","Non-Operating Expense"],"9013":["DELETED ACCOUNT","Non-Operating Expense"],"9014":["DELETED ACCOUNT","Non-Operating Expense"],"9015":["DELETED ACCOUNT","Non-Operating Expense"],"9016":["DELETED ACCOUNT","Non-Operating Expense"],"9017":["DELETED ACCOUNT","Non-Operating Expense"],"9018":["DELETED ACCOUNT","Non-Operating Expense"],"9019":["DELETED ACCOUNT","Non-Operating Expense"],"9020":["DELETED ACCOUNT","Non-Operating Expense"],"9021":["DELETED ACCOUNT","Non-Operating Expense"],"9022":["DELETED ACCOUNT","Non-Operating Expense"],"9023":["DELETED ACCOUNT","Non-Operating Expense"],"9024":["DELETED ACCOUNT","Non-Operating Expense"],"9025":["DELETED ACCOUNT","Non-Operating Expense"],"9026":["DELETED ACCOUNT","Non-Operating Expense"],"9027":["DELETED ACCOUNT","Non-Operating Expense"],"9028":["DELETED ACCOUNT","Non-Operating Expense"],"9029":["DELETED ACCOUNT","Non-Operating Expense"],"9030":["DELETED ACCOUNT","Non-Operating Expense"],"9031":["DELETED ACCOUNT","Non-Operating Expense"],"9032":["DELETED ACCOUNT","Non-Operating Expense"],"9033":["DELETED ACCOUNT","Non-Operating Expense"],"9034":["DELETED ACCOUNT","Non-Operating Expense"],"9035":["DELETED ACCOUNT","Non-Operating Expense"],"9036":["DELETED ACCOUNT","Non-Operating Expense"],"9037":["DELETED ACCOUNT","Non-Operating Expense"],"9038":["DELETED ACCOUNT","Non-Operating Expense"],"9039":["DELETED ACCOUNT","Non-Operating Expense"],"9040":["DELETED ACCOUNT","Non-Operating Expense"],"9041":["DELETED ACCOUNT","Non-Operating Expense"],"9042":["DELETED ACCOUNT","Non-Operating Expense"],"\u00a9 ResMan, LLC":["",""]};
+function acct(c){var a=COA[String(c||'').trim()];return a?a[0]:'';}
+var IMPORT_HEAD=['Property Abbreviation','Date','GL Account Number','Description','Debit','Credit','Accounting Basis','Line-Item Description','Reversal Date','Reference'];
+var BILL_HEAD=['Date','Amount','Merchant Description','GL (Ramp)','Bill check','Vendor on bill','Bill #','Bill date','Bill amount','What to do'];
+var FLAG_HEAD=['Date','Amount','Merchant Description','Ramp Location','External ID','Issue'];
+var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+/* ---------- state ---------- */
+var bills={aging:{},inv:{},files:[]}, holdBills=true;
+var basisSel='Both', includePay=true, postDate='', layout='legacy', codeTxt='GO=Greenoak';
+var ledger={by:{},files:[]}, useLedger=true, glMin='low';
+var AUTO_HEAD=['Date','Amount','Merchant Description','GL assigned','Account name','Confidence','Based on','Ramp memo'];
+var sources=[], over={}, openPrev={}, tabSel={}, pFilter='all', uid=0, gl={}, dateFmt='mdy', dl=null;
+try{gl=JSON.parse(localStorage.getItem('ramp_gl_v1')||'{}')||{};}catch(e){gl={};}
+try{dateFmt=localStorage.getItem('ramp_datefmt')||'mdy';}catch(e){}
+function saveGl(){try{localStorage.setItem('ramp_gl_v1',JSON.stringify(gl));}catch(e){}}
+
+/* ---------- helpers ---------- */
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function money(c){var n=Math.abs(c),s='$'+Math.floor(n/100).toLocaleString('en-US')+'.'+('0'+(n%100)).slice(-2);return c<0?'-'+s:s;}
+function plain(c){var n=Math.abs(c);return (c<0?'-':'')+Math.floor(n/100)+'.'+('0'+(n%100)).slice(-2);}
+function pad(n){return ('0'+n).slice(-2);}
+function mkey(m){return String(m||'').toLowerCase().replace(/\s+/g,' ').trim();}
+function fmtDate(iso){if(!iso)return '';var p=iso.split('-');return dateFmt==='iso'?iso:p[1]+'/'+p[2]+'/'+p[0];}
+function csvCell(v){v=v==null?'':String(v);return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function toCSV(head,rows){return [head].concat(rows).map(function(r){return r.map(csvCell).join(',');}).join('\r\n')+'\r\n';}
+function toast(t){var el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){el.hidden=true;},3200);}
+function ymLabel(ym){return MONTHS[+ym.slice(4)-1]+' '+ym.slice(0,4);}
+
+/* ---------- CSV parsing ---------- */
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+  var rows=[],row=[],f='',q=false,i=0,c;
+  while(i<text.length){c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"')q=true;
+    else if(c===','){row.push(f);f='';}
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(f);f=''; if(row.length>1||row[0]!=='')rows.push(row); row=[]; }
+    else f+=c;
+    i++;
+  }
+  if(f!==''||row.length){row.push(f);rows.push(row);}
+  return rows;
+}
+var ALIASES={
+  type:['type','transaction type'],
+  date:['transaction date','date','user transaction time','transaction time','posted date'],
+  amount:['amount','original amount','amount (usd)'],
+  merchant:['merchant description','merchant','merchant name','description','merchant_description'],
+  code:['accounting category code','category code','gl code','accounting category id','gl account'],
+  mname:['merchant name'],
+  memo:['memo'],
+  loc:['ramp location','location','location name'],
+  ent:['ramp entity','entity','legal entity'],
+  ext:['external id','external_id','transaction id','id']
+};
+function detectMap(headers){
+  var map={},low=headers.map(function(h){return h.trim().toLowerCase();});
+  Object.keys(ALIASES).forEach(function(k){
+    for(var a=0;a<ALIASES[k].length;a++){var ix=low.indexOf(ALIASES[k][a]); if(ix>=0){map[k]=ix;break;}}
+  });
+  return map;
+}
+function parseAmt(s){
+  s=String(s==null?'':s).trim(); if(!s)return null;
+  var neg=/^\(.*\)$/.test(s)||/^-/.test(s)||/-$/.test(s);
+  var v=parseFloat(s.replace(/[^0-9.]/g,'')); if(isNaN(v))return null;
+  var c=Math.round(v*100); return neg?-c:c;
+}
+function parseDateStr(s){
+  s=String(s||'').trim(); var m;
+  if((m=s.match(/^(\d{4})-(\d{2})-(\d{2})/)))return m[1]+'-'+m[2]+'-'+m[3];
+  if((m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))){var y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+pad(+m[1])+'-'+pad(+m[2]);}
+  if((m=s.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/))&&MON[m[1].toLowerCase()])return m[3]+'-'+pad(MON[m[1].toLowerCase()])+'-'+pad(+m[2]);
+  return '';
+}
+
+/* ---------- PDF parsing (Ramp statement layout) ---------- */
+var DATE_RE=/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),\s*(\d{4})$/;
+var MONEY_RE=/^-?\$[\d,]+\.\d{2}(\s*USD)?$/;
+function cents(s){var neg=/^-/.test(s);var n=Math.round(parseFloat(s.replace(/[^0-9.]/g,''))*100);return neg?-n:n;}
+function groupLines(items){
+  var rows=[];
+  items.filter(function(i){return i.str.trim();}).sort(function(a,b){return b.y-a.y||a.x-b.x;}).forEach(function(it){
+    var r=rows.filter(function(r){return Math.abs(r.y-it.y)<3;})[0]; if(r)r.its.push(it); else rows.push({y:it.y,its:[it]});
+  });
+  return rows.map(function(r){return r.its.sort(function(a,b){return a.x-b.x;}).map(function(i){return i.str.trim();}).join(' ').replace(/\s+/g,' ');});
+}
+function parseStatement(pages){
+  var out={entity:'',start:'',end:'',spent:null,txs:[],skipped:[],warnings:[]};
+  var lines=groupLines(pages[0]||[]),all=lines.join('\n'),m;
+  for(var i=0;i<lines.length;i++){
+    if((m=lines[i].match(/^Card Statement:\s*(.+)$/i)))out.entity=m[1].trim();
+    else if(/^Ramp Statement$/i.test(lines[i])&&!out.entity)out.entity=(lines[i+1]||'').trim();
+  }
+  m=all.match(/Amount Spent\s+\$([\d,]+\.\d{2})/i); if(m)out.spent=cents(m[1]);
+  var per=all.match(/([A-Z][a-z]+ \d{1,2}, \d{4})\s+([A-Z][a-z]+ \d{1,2}, \d{4})/);
+  if(per){out.start=parseDateStr(per[1]);out.end=parseDateStr(per[2]);}
+  else{var q=all.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/); if(q){out.start=parseDateStr(q[1]);out.end=parseDateStr(q[2]);}}
+  pages.forEach(function(items){
+    var h={};
+    items.forEach(function(it){var s=it.str.trim();
+      if(s==='Description')h.desc=it; if(s==='User')h.user=it;
+      if(/^Amount/.test(s)&&it.y>600)h.amt=it; if(/^Balance/.test(s)&&it.y>600)h.bal=it;});
+    if(!(h.desc&&h.user&&h.amt&&h.bal))return;
+    var amtR=h.amt.x+h.amt.w, balR=h.bal.x+h.bal.w;
+    var body=items.filter(function(it){return it.y<h.desc.y-3&&it.y>50&&it.str.trim();});
+    var anchors=body.filter(function(it){return it.x<h.desc.x-40&&DATE_RE.test(it.str.trim());}).sort(function(a,b){return b.y-a.y;});
+    var blocks=anchors.map(function(a){return {a:a,items:[]};});
+    body.forEach(function(it){var best=null;
+      blocks.forEach(function(b){var d=b.a.y-it.y; if(d>=-9&&(best===null||d<best.d))best={b:b,d:d};});
+      if(best)best.b.items.push(it);});
+    blocks.forEach(function(b){
+      var dm=b.a.str.trim().match(DATE_RE), iso=dm[3]+'-'+pad(MON[dm[1].toLowerCase()])+'-'+pad(+dm[2]);
+      function col(lo,hi){return b.items.filter(function(it){return it.x>=lo&&it.x<hi;}).sort(function(p,q){return q.y-p.y||p.x-q.x;});}
+      var descItems=col(h.desc.x-4,h.user.x-4), userItems=col(h.user.x-4,h.amt.x-30), amount=null;
+      b.items.filter(function(it){return MONEY_RE.test(it.str.trim());}).forEach(function(it){
+        var r=it.x+it.w; if(Math.abs(r-amtR)<Math.abs(r-balR)&&(amount===null||it.y>amount.y))amount=it;});
+      var lns=[]; descItems.forEach(function(it){var l=lns.filter(function(l){return Math.abs(l.y-it.y)<2;})[0]; if(l)l.t+=' '+it.str.trim(); else lns.push({y:it.y,t:it.str.trim()});});
+      var flat=lns.map(function(l){return l.t;});
+      var user=userItems.length?userItems.filter(function(it){return Math.abs(it.y-userItems[0].y)<2;}).map(function(it){return it.str.trim();}).join(' '):'';
+      var isPay=flat.some(function(t){return /^Payment\b/.test(t)||/^Statement Credit$/i.test(t)||/^Cashback$/i.test(t);});
+      if(isPay){out.skipped.push(flat[0]||'Payment');return;}
+      if(!amount||!flat.length){out.warnings.push('Could not read the row dated '+b.a.str);return;}
+      out.txs.push({date:iso,amountC:cents(amount.str.trim()),merchant:(flat.length>1?flat.slice(0,-1):flat).join(' ').trim(),category:flat.length>1?flat[flat.length-1]:'',user:user});
+    });
+  });
+  return out;
+}
+function readPdf(buf,name){
+  return pdfjsLib.getDocument({data:new Uint8Array(buf),disableWorker:true}).promise.then(function(doc){
+    var pages=[],chain=Promise.resolve();
+    for(var p=1;p<=doc.numPages;p++)(function(n){chain=chain.then(function(){return doc.getPage(n).then(function(pg){return pg.getTextContent();}).then(function(tc){
+      pages.push(tc.items.map(function(t){return {x:t.transform[4],y:t.transform[5],w:t.width,str:t.str};}));});});})(p);
+    return chain.then(function(){
+      var r=parseStatement(pages);
+      return {id:++uid,name:name,kind:'pdf',meta:r};
+    });
+  });
+}
+
+
+/* ---------- bill reports: AP Aging Detail + Invoice Detail (xlsx) ---------- */
+var STOPW={the:1,llc:1,inc:1,corp:1,com:1,www:1,and:1,store:1,online:1,ach:1,payment:1,pay:1,services:1,service:1,group:1,company:1,san:1,antonio:1,
+  usa:1,pos:1,tst:1};
+function toks(s){
+  s=String(s||'').toLowerCase().replace(/\b(sq|tst|sp|in|pp|pos)\s*\*/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+  var o=[],seen={}; s.split(' ').forEach(function(w){if(w.length<3||/^\d+$/.test(w)||STOPW[w]||seen[w])return;seen[w]=1;o.push(w);}); return o;
+}
+function vendorMatch(a,b){
+  if(!a.length||!b.length)return false; var n=0;
+  a.forEach(function(x){if(b.some(function(y){return x===y||(x.length>=5&&y.length>=5&&(x.indexOf(y)===0||y.indexOf(x)===0));}))n++;});
+  return n>=Math.min(2,a.length,b.length);
+}
+function cv(c){var v=c&&c.value; if(v&&typeof v==='object'&&!(v instanceof Date)){if(v.result!==undefined)v=v.result;else if(v.richText)v=v.richText.map(function(x){return x.text;}).join('');else if(v.text)v=v.text;} return v==null?'':v;}
+function dIso(v){if(v instanceof Date&&!isNaN(v))return v.getUTCFullYear()+'-'+pad(v.getUTCMonth()+1)+'-'+pad(v.getUTCDate()); return typeof v==='string'&&v?(parseDateStr(v)||''):'';}
+function numC(v){if(typeof v==='number')return Math.round(v*100); if(typeof v==='string'&&v.trim()){var c=parseAmt(v);return c===null?null:c;} return null;}
+function propFromTitle(t){var n=nrm(t),i;for(i=0;i<PROPS.length;i++){if(n.indexOf(nrm(PROPS[i].name))>-1)return PROPS[i];}return null;}
+function readBillReport(buf,name){
+  var wb=new ExcelJS.Workbook();
+  return wb.xlsx.load(buf).then(function(){
+    var ws=wb.worksheets[0]; if(!ws)return {name:name,bad:true};
+    var title=String(cv(ws.getCell(1,1))), kind=String(cv(ws.getCell(3,1))).toLowerCase(), p=propFromTitle(title);
+    var aging=kind.indexOf('ap aging')>-1, invd=kind.indexOf('invoice detail')>-1;
+    if(!p||(!aging&&!invd))return {name:name,bad:true};
+    var asof=String(cv(ws.getCell(4,1))), out=[], vendor='', cur=null;
+    ws.eachRow({includeEmpty:false},function(row,rn){
+      if(rn<7)return;
+      var c=[],i; for(i=1;i<=21;i++)c[i]=cv(row.getCell(i));
+      var others=c.slice(2).some(function(x){return x!=='';});
+      if(c[1]!==''&&typeof c[1]==='string'&&(!others||c[3]===c[1]||c.slice(4,22).every(function(x){return x===''||x===c[1];}))){vendor=String(c[1]).trim();return;}
+      if(aging){
+        if(c[3]===''||c[3]===c[1]||!dIso(c[5]))return;
+        out.push({vendor:vendor,inv:String(c[1]).trim(),invdate:dIso(c[5]),due:dIso(c[8]),desc:String(c[10]||''),balC:numC(c[13]),b30:numC(c[15])||0,b60:numC(c[16])||0,b90:numC(c[19])||0,b91:numC(c[20])||0,vt:toks(vendor)});
+      }else{
+        if(c[1]!==''&&c[2] instanceof Date){cur={vendor:vendor,inv:String(c[1]).trim(),invdate:dIso(c[2]),due:dIso(c[5]),desc:String(c[6]||''),totalC:numC(c[8]),lines:[],vt:toks(vendor)};out.push(cur);}
+        else if(c[1]===''&&cur&&typeof c[2]==='string'){cur.lines.push({gl:String(c[3]||'').trim(),desc:String(c[5]||'').trim(),amtC:numC(c[7])});}
+      }
+    });
+    return {name:name,abbr:p.abbr,kind:aging?'aging':'inv',rows:out,asof:asof};
+  });
+}
+function addReport(r){
+  if(!r||r.bad)return false;
+  bills[r.kind==='aging'?'aging':'inv'][r.abbr]=r.rows;
+  bills.files=bills.files.filter(function(f){return !(f.abbr===r.abbr&&f.kind===r.kind);});
+  bills.files.push({name:r.name,abbr:r.abbr,kind:r.kind,count:r.rows.length,asof:r.asof}); return true;
+}
+function haveBills(abbr){return !!(bills.aging[abbr]||bills.inv[abbr]);}
+function dayDiff(a,b){return Math.abs(Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/864e5;}
+function matchBill(abbr,t){
+  if(!haveBills(abbr)||t.amountC===null||t.amountC<=0||!t.date)return null;
+  var tk=toks(t.merchant),best=null,bd=1e12;
+  (bills.aging[abbr]||[]).forEach(function(x){
+    if(x.used||x.balC!==t.amountC||!vendorMatch(tk,x.vt))return;
+    var d=x.invdate?dayDiff(x.invdate,t.date):9e6; if(d<bd){bd=d;best=x;}});
+  if(best){best.used=true;return {s:'open',b:best};}
+  (bills.inv[abbr]||[]).forEach(function(x){
+    if(x.used||!x.invdate||!vendorMatch(tk,x.vt))return;
+    if(x.totalC!==t.amountC&&!x.lines.some(function(l){return l.amtC===t.amountC;}))return;
+    var d=dayDiff(x.invdate,t.date); if(d<=120&&d<bd){bd=d;best=x;}});
+  if(best){best.used=true;return {s:'billed',b:best};}
+  return {s:'none'};
+}
+function resetBillUse(){Object.keys(bills.aging).forEach(function(k){bills.aging[k].forEach(function(x){x.used=false;});});Object.keys(bills.inv).forEach(function(k){bills.inv[k].forEach(function(x){x.used=false;});});}
+function apSummary(){
+  var out=[]; PROPS.forEach(function(p){var l=bills.aging[p.abbr]; if(!l)return;
+    var o={p:p,n:0,bal:0,b30:0,b60:0,b90:0,b91:0,cr:0,crAmt:0};
+    l.forEach(function(x){if(x.balC<0){o.cr++;o.crAmt+=x.balC;}else o.n++; o.bal+=x.balC||0;o.b30+=x.b30;o.b60+=x.b60;o.b90+=x.b90;o.b91+=x.b91;}); out.push(o);});
+  return out;
+}
+function billPanel(){
+  if(!bills.files.length)return '';
+  var ag=bills.files.filter(function(f){return f.kind==='aging';}).length, iv=bills.files.length-ag;
+  var h='<div class="apbox"><div class="row" style="justify-content:space-between"><div><b>Bill reports loaded:</b> '+ag+' AP Aging, '+iv+' Invoice Detail</div>'+
+    '<label class="chk"><input type="checkbox" id="holdbills"'+(holdBills?' checked':'')+'> Leave out Ramp payments that match an open bill</label></div>';
+  var sm=apSummary();
+  if(sm.length){
+    h+='<details style="margin-top:8px"><summary>AP aging by property</summary><div class="tw" style="margin-top:8px"><table><thead><tr><th>Property</th><th class="n">Open bills</th><th class="n">Balance</th><th class="n">0-30</th><th class="n">31-60</th><th class="n">61-90</th><th class="n">Over 90</th><th class="n">Credits</th></tr></thead><tbody>';
+    var t=[0,0,0,0,0,0,0];
+    sm.forEach(function(o){h+='<tr><td>'+esc(o.p.abbr+' · '+o.p.name)+'</td><td class="n">'+o.n+'</td><td class="n">'+money(o.bal)+'</td><td class="n">'+money(o.b30)+'</td><td class="n">'+money(o.b60)+'</td><td class="n">'+money(o.b90)+'</td><td class="n">'+money(o.b91)+'</td><td class="n">'+o.cr+' ('+money(o.crAmt)+')</td></tr>';
+      t[0]+=o.n;t[1]+=o.bal;t[2]+=o.b30;t[3]+=o.b60;t[4]+=o.b90;t[5]+=o.b91;t[6]+=o.crAmt;});
+    h+='<tr><td><b>All</b></td><td class="n">'+t[0]+'</td><td class="n">'+money(t[1])+'</td><td class="n">'+money(t[2])+'</td><td class="n">'+money(t[3])+'</td><td class="n">'+money(t[4])+'</td><td class="n">'+money(t[5])+'</td><td class="n">'+money(t[6])+'</td></tr></tbody></table></div></details>';
+  }
+  return h+'</div>';
+}
+function billTable(rows){
+  var h='<p class="legend"><span><i style="background:var(--warn-bg);border:1px solid var(--line)"></i>Open bill: close it against this payment</span><span><i style="background:var(--soft);border:1px solid var(--line)"></i>Bill already entered</span><span>No colour: no bill found, create one if it is a vendor invoice</span></p><div class="tw scroll"><table><thead><tr>'+BILL_HEAD.map(function(x,i){return '<th'+(i===1||i===8?' class="n"':'')+'>'+esc(x)+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){h+='<tr class="'+r.cls+'">'+r.cells.map(function(v,i){return '<td'+(i===1||i===8?' class="n"':(i===9?' class="wrap"':''))+'>'+esc(v)+'</td>';}).join('')+'</tr>';});
+  return h+'</tbody></table></div>';
+}
+
+
+/* ---------- General Ledger: learn which GL each vendor is usually coded to ---------- */
+var GENERIC={r:1,m:1,t:1,c:1,admin:1,exp:1,expense:1,expenses:1,supplies:1,supply:1,repairs:1,repair:1,maint:1,maintenance:1,general:1,operating:1,and:1,related:1,monthly:1,other:1,misc:1,equipment:1,tools:1,fees:1,fee:1,the:1,for:1};
+function stems(s){var o={};String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').forEach(function(w){if(w.length>=4&&!GENERIC[w])o[w.slice(0,4)]=1;});return o;}
+function xmlDec(t){return t.indexOf('&')<0?t:t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');}
+function colIx(L){var n=0;for(var i=0;i<L.length;i++)n=n*26+L.charCodeAt(i)-64;return n;}
+function fastSheet(buf){
+  return JSZip.loadAsync(buf).then(function(z){
+    var ssF=z.file('xl/sharedStrings.xml'), shF=z.file('xl/worksheets/sheet1.xml');
+    if(!shF){var nm=Object.keys(z.files).filter(function(k){return /^xl\/worksheets\/sheet\d+\.xml$/.test(k);}).sort();if(nm.length)shF=z.file(nm[0]);}
+    if(!shF)return null;
+    return Promise.all([ssF?ssF.async('string'):Promise.resolve(''),shF.async('string')]).then(function(a){
+      var ss=[]; if(a[0]){var re=/<si>([\s\S]*?)<\/si>/g,m;while((m=re.exec(a[0]))){var t='',r2=/<t[^>]*>([\s\S]*?)<\/t>/g,q;while((q=r2.exec(m[1])))t+=q[1];ss.push(xmlDec(t));}}
+      var rows=[],rr=/<row\s[^>]*?\br="(\d+)"[^>]*?(?:\/>|>([\s\S]*?)<\/row>)/g,m2;
+      while((m2=rr.exec(a[1]))){
+        var cells=[],body=m2[2]||'',cr=/<c\s([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,c;
+        while((c=cr.exec(body))){
+          var attrs=c[1]||'',rm=/\br="([A-Z]+)\d+"/.exec(attrs); if(!rm)continue; var ix=colIx(rm[1]); if(ix>10)continue; var inner=c[2]||'',tm=/\bt="(\w+)"/.exec(attrs),ty=tm?tm[1]:'',v;
+          var vm=/<v>([\s\S]*?)<\/v>/.exec(inner);
+          if(ty==='s'&&vm)v=ss[parseInt(vm[1],10)]; else if(ty==='inlineStr'){var im=/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner);v=im?xmlDec(im[1]):'';}
+          else if(ty==='str'&&vm)v=xmlDec(vm[1]); else if(vm&&ty!=='e'){v=parseFloat(vm[1]);} else continue;
+          cells[ix]=v;
+        }
+        rows.push({n:parseInt(m2[1],10),c:cells});
+      }
+      return rows;
+    });
+  });
+}
+function readLedger(buf,name){
+  return fastSheet(buf).then(function(rows){
+    if(!rows)return {name:name,bad:true};
+    var g=function(n,i){for(var k=0;k<rows.length&&rows[k].n<=n;k++){if(rows[k].n===n)return rows[k].c[i]||'';}return '';};
+    var title=String(g(1,1)), kind=String(g(3,1)).toLowerCase(), p=propFromTitle(title);
+    if(!p||kind.indexOf('general ledger')<0)return {name:name,bad:true};
+    var acct='',lines=[];
+    rows.forEach(function(r){
+      if(r.n<7)return; var c=r.c, a=c[1], d=c[4];
+      if(typeof a==='string'&&typeof d==='string'&&d.indexOf('Beginning')===0){acct=a.trim().split(/\s+/)[0];return;}
+      if(typeof a!=='number'||!acct)return;
+      lines.push({acct:acct,ref:String(c[2]==null?'':c[2]).trim(),name:String(c[4]==null?'':c[4]).trim(),desc:String(c[5]==null?'':c[5]).trim(),dr:Math.round((+c[6]||0)*100),cr:Math.round((+c[7]||0)*100)});
+    });
+    var cc=p.gl, refs={};
+    lines.forEach(function(x){if(x.acct===cc&&x.ref)refs[x.ref]=1;});
+    var keys={};
+    lines.forEach(function(x){
+      if(x.acct===cc||(!x.dr&&!x.cr))return;
+      var first=x.acct.charAt(0), ramp=!!(x.ref&&refs[x.ref]);
+      if(!ramp&&first!=='5'&&first!=='6')return;
+      if(ramp&&(first==='2'||first==='3'||first==='4'||x.acct.indexOf('1092')===0||x.acct.indexOf('1093')===0||x.acct.indexOf('1094')===0))return;
+      var w=ramp?3:1, srcs=[x.desc]; if(x.name&&nrm(x.name).trim()!==nrm(title).trim()&&!/^\d+\s*-\s/.test(x.name))srcs.push(x.name);
+      srcs.forEach(function(sx){var t=toks(sx); if(!t.length)return; var k=t.join(' '); if(!keys[k])keys[k]={t:t,g:{}}; keys[k].g[x.acct]=(keys[k].g[x.acct]||0)+w;});
+    });
+    return {name:name,abbr:p.abbr,keys:Object.keys(keys).map(function(k){return keys[k];}),lines:lines.length,refs:Object.keys(refs).length};
+  });
+}
+function addLedger(r){
+  if(!r||r.bad)return false;
+  ledger.by[r.abbr]=r.keys; ledger.files=ledger.files.filter(function(f){return f.abbr!==r.abbr;});
+  ledger.files.push({name:r.name,abbr:r.abbr,patterns:r.keys.length,lines:r.lines}); return true;
+}
+function rampHistory(){
+  var h={}; batches.forEach(function(b){b.txs.forEach(function(t){if(!t.code)return; var k=mkey(t.merchant); (h[k]=h[k]||{})[t.code]=(h[k][t.code]||0)+1;});}); return h;
+}
+function pickGl(cands,memoText,evid){
+  var tot=0,gs=Object.keys(cands); if(!gs.length)return null;
+  gs.forEach(function(g){tot+=cands[g];});
+  var ms=stems(memoText), best=null,bs=-1,hit=false;
+  gs.forEach(function(g){var an=acct(g), as=stems(an), mh=Object.keys(as).some(function(k){return ms[k];}); var sc=cands[g]*(mh?2.5:1); if(sc>bs){bs=sc;best=g;hit=mh;}});
+  var share=cands[best]/tot, conf=(cands[best]>=9&&share>=.8)||(hit&&share>=.25)||(share>=.8&&cands[best]>=3)?'High':share>=.5?'Medium':'Low';
+  var alt=gs.sort(function(a,c){return cands[c]-cands[a];}).slice(0,4).map(function(g){return g+' ('+Math.round(cands[g])+' pts)';}).join(', ');
+  return {gl:best,conf:conf,why:evid+(hit?' · memo matches '+acct(best):'')+' · '+alt};
+}
+function ledgerSuggest(abbr,t,rh){
+  if(!useLedger||t.code)return null;
+  var mk=mkey(t.merchant), r=rh[mk];
+  if(r){var o={}; Object.keys(r).forEach(function(g){o[g]=r[g];}); var p0=pickGl(o,t.memo+' '+t.category,'Same merchant coded in Ramp'); if(p0){p0.conf='High';return p0;}}
+  var A=toks(t.merchant),B=toks(t.mname), tryKeys=function(list){
+    var c={}; list.forEach(function(k){if(vendorMatch(A,k.t)||(B.length&&vendorMatch(B,k.t)))Object.keys(k.g).forEach(function(g){c[g]=(c[g]||0)+k.g[g];});}); return c;};
+  var own=ledger.by[abbr]||[], c=tryKeys(own), from='General Ledger';
+  if(!Object.keys(c).length){var all=[];Object.keys(ledger.by).forEach(function(k){if(k!==abbr)all=all.concat(ledger.by[k]);}); c=tryKeys(all); from='Another property\'s ledger';}
+  if(!Object.keys(c).length)return null;
+  var tot=0;Object.keys(c).forEach(function(g){tot+=c[g];});
+  var p=pickGl(c,t.memo+' '+t.category,from+' ('+Math.round(tot)+' pts)'); if(p&&from!=='General Ledger'&&p.conf==='High')p.conf='Medium'; return p;
+}
+function confOk(c){return glMin==='low'||(glMin==='med'&&c!=='Low')||(glMin==='high'&&c==='High');}
+function ledgerPanel(){
+  if(!ledger.files.length)return '';
+  return '<div class="apbox"><div class="row" style="justify-content:space-between"><div><b>General Ledger loaded:</b> '+ledger.files.map(function(f){return f.abbr;}).join(', ')+'</div>'+
+   '<div class="row"><label class="chk"><input type="checkbox" id="useledger"'+(useLedger?' checked':'')+'> Fill missing GL codes from the ledger</label>'+
+   '<select id="glmin"><option value="low"'+(glMin==='low'?' selected':'')+'>Use every match</option><option value="med"'+(glMin==='med'?' selected':'')+'>Medium and High only</option><option value="high"'+(glMin==='high'?' selected':'')+'>High only</option></select></div></div></div>';
+}
+function autoTable(rows){
+  var h='<p class="legend"><span><i style="background:#E3F3E6;border:1px solid var(--line)"></i>GL taken from the ledger, not from Ramp</span></p><div class="tw scroll"><table><thead><tr>'+AUTO_HEAD.map(function(x,i){return '<th'+(i===1?' class="n"':'')+'>'+esc(x)+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){h+='<tr>'+r.map(function(v,i){return '<td'+(i===1?' class="n"':(i===6||i===7?' class="wrap"':''))+'>'+esc(v)+'</td>';}).join('')+'</tr>';});
+  return h+'</tbody></table></div>';
+}
+
+/* ---------- property + batch logic ---------- */
+function propByAbbr(a){return PROPS.filter(function(p){return p.abbr===a;})[0]||null;}
+function nrm(s){return ' '+String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()+' ';}
+function propFromEntity(s){
+  s=nrm(s); if(s.trim()==='')return null;
+  for(var i=0;i<PROPS.length;i++)for(var j=0;j<PROPS[i].alias.length;j++)if(s.indexOf(nrm(PROPS[i].alias[j]))>=0)return PROPS[i];
+  return null;
+}
+function propFromLocation(raw){
+  var letters=String(raw||'').replace(/[^A-Za-z]/g,'').toUpperCase();
+  var p=propByAbbr(letters); if(p)return p;
+  return propFromEntity(raw);
+}
+function stampYm(src,txs){
+  if(src.kind==='pdf'&&src.meta.start)return src.meta.start.slice(0,4)+src.meta.start.slice(5,7);
+  var m=src.name.match(/(\d{4})-(\d{2})-\d{2}/); if(m)return m[1]+m[2];
+  var cnt={},best='',bn=0; txs.forEach(function(t){var k=t.date.slice(0,4)+t.date.slice(5,7); if(t.date){cnt[k]=(cnt[k]||0)+1; if(cnt[k]>bn){bn=cnt[k];best=k;}}});
+  return best||'';
+}
+function deriveBatches(src){
+  if(src.kind==='pdf'){
+    var txs=src.meta.txs.map(function(t){var k=mkey(t.merchant);return {date:t.date,amountC:t.amountC,merchant:t.merchant,category:t.category,user:t.user,code:gl[k]||'',loc:src.meta.entity,ext:'',mkey:k};});
+    var key='f'+src.id, ov=over[key]||{}, det=propFromEntity(src.meta.entity);
+    var prop=ov.abbr!==undefined?propByAbbr(ov.abbr):det;
+    return [{key:key,src:src,label:src.meta.entity||src.name,prop:prop,inferNote:'',
+      ym:ov.ym||stampYm(src,txs),txs:txs,skipped:{'Payments and credits':src.meta.skipped.length},notes:src.meta.warnings.slice(),pdf:true}];
+  }
+  var map=src.map, groups={}, order=[], skipped={}, pays=[], noType=map.type===undefined;
+  src.rows.forEach(function(r){
+    var type=noType?'Transaction':(r[map.type]||'').trim();
+    if(includePay&&/^transfer/i.test(type)){pays.push({r:r,type:type});return;}
+    if(type.toLowerCase()!=='transaction'){var k=/^transfer/i.test(type)?'Transfer':(type||'(blank type)');skipped[k]=(skipped[k]||0)+1;return;}
+    var locRaw=map.loc!==undefined?(r[map.loc]||'').trim():'';
+    var g=locRaw.replace(/[^A-Za-z]/g,'').toUpperCase();
+    if(!groups[g]){groups[g]={loc:locRaw,txs:[]};order.push(g);}
+    groups[g].txs.push({date:map.date!==undefined?parseDateStr(r[map.date]):'',rawAmt:map.amount!==undefined?r[map.amount]:'',amountC:map.amount!==undefined?parseAmt(r[map.amount]):null,
+      merchant:map.merchant!==undefined?(r[map.merchant]||'').trim():'',category:'',user:'',mname:map.mname!==undefined?(r[map.mname]||'').trim():'',memo:map.memo!==undefined?(r[map.memo]||'').trim():'',ent:map.ent!==undefined?(r[map.ent]||'').trim():'',code:map.code!==undefined?(r[map.code]||'').trim():'',loc:locRaw,ext:map.ext!==undefined?(r[map.ext]||'').trim():''});
+  });
+  pays.forEach(function(p){
+    var r=p.r, ent=map.ent!==undefined?(r[map.ent]||'').trim():'';
+    var tgt=order.filter(function(g){return groups[g].txs.length&&groups[g].txs[0].ent===ent;})[0];
+    if(tgt===undefined)tgt=order[0];
+    if(tgt===undefined){order.push('');groups['']={loc:'',txs:[]};tgt='';}
+    var dtRaw=map.date!==undefined?r[map.date]:'';
+    groups[tgt].txs.push({isPay:true,date:parseDateStr(dtRaw),rawAmt:map.amount!==undefined?r[map.amount]:'',amountC:map.amount!==undefined?parseAmt(r[map.amount]):null,merchant:'Payment to Ramp CC',category:'',user:'',mname:'',memo:p.type,ent:ent,code:'',loc:'',ext:map.ext!==undefined?(r[map.ext]||'').trim():''});
+  });
+  if(!order.length){order.push('');groups['']={loc:'',txs:[]};}
+  return order.map(function(g){
+    var grp=groups[g]||{loc:'',txs:[]}, key='f'+src.id+'|'+g, ov=over[key]||{};
+    var det=propFromLocation(grp.loc), how='', ent=grp.txs.length?grp.txs[0].ent:'';
+    if(!det){det=propFromEntity(ent); if(det)how='Ramp Location "'+grp.loc+'" is not a property name, so the property was taken from the Ramp Entity "'+ent+'".';}
+    if(!det){det=propFromEntity(src.name); if(det)how='No property in the Ramp Location, so it was taken from the file name.';}
+    var prop=ov.abbr!==undefined?propByAbbr(ov.abbr):det; if(ov.abbr!==undefined)how='';
+    var notes=[]; if(noType)notes.push('This file has no Type column, so every row was treated as a transaction. The SOP expects Type = Transaction.');
+    return {key:key,src:src,label:prop?prop.name:(grp.loc||'No Ramp Location'),locRaw:grp.loc,prop:prop,inferNote:how,inferred:false,ym:ov.ym||stampYm(src,grp.txs),txs:grp.txs,skipped:skipped,notes:notes,pdf:false};
+  });
+}
+function build(b){
+  var rows=[],flagged=[],review=[],deb=0,cre=0,count=0,refunds=0,bc=[],held=0,heldC=0,nOpen=0,nBilled=0,nNone=0,autos=[],nAuto={High:0,Medium:0,Low:0},nPay=0,payC=0,payRows=[];
+  var bcAdd=function(t,where){var bm=t.bill; if(!bm||!b.prop)return; var x=bm.b||{}, st=bm.s==='open'?'Open bill found':bm.s==='billed'?'Bill already entered':'No bill found', todo;
+    if(bm.s==='open'){nOpen++; todo=where==='held'?'Close bill '+(x.inv?'#'+x.inv:'(no number, dated '+fmtDate(x.invdate)+')')+' against this payment in ResMan (pay it with CC GL '+b.prop.gl+'). Left out of the import so the expense is not booked twice.':'Open bill '+(x.inv?'#'+x.inv:'(no number)')+' exists. Importing this as a journal entry doubles the expense. Close the bill instead.';}
+    else if(bm.s==='billed'){nBilled++; todo='Bill #'+x.inv+' ('+fmtDate(x.invdate)+') is already entered. Check it is not also paid another way before importing.';}
+    else {nNone++; todo=where==='flagged'?'No bill found. Not in the import yet (see Flagged).':'No bill in AP Aging or Invoice Detail. Imported as a journal entry. Create a bill in ResMan if this is a vendor invoice.';}
+    var amtB=bm.s==='open'?plain(x.balC):bm.s==='billed'?plain(x.totalC||0):'';
+    bc.push({cls:bm.s==='open'?'b-open':bm.s==='billed'?'b-billed':'',s:bm.s,cells:[fmtDate(t.date),plain(t.amountC),t.merchant,t.code,st,x.vendor||'',x.inv||'',fmtDate(x.invdate||''),amtB,todo]});};
+  b.txs.forEach(function(t){
+    if(t.isPay){
+      var pi=!b.prop?'Unknown property':!b.prop.op?'No operating bank GL set for this property':t.amountC===null?'Amount could not be read':t.amountC===0?'Zero amount':!t.date?'Date could not be read':'';
+      if(pi){flagged.push([fmtDate(t.date),t.amountC===null?t.rawAmt:plain(t.amountC),t.memo,t.loc,t.ext,'Card payment: '+pi]);return;}
+      var pa=Math.abs(t.amountC), pas=plain(pa), neg=t.amountC<0, pd=fmtDate(t.date), dg=neg?b.prop.gl:b.prop.op, cg=neg?b.prop.op:b.prop.gl;
+      payRows.push([b.prop.abbr,pd,dg,t.merchant,pas,'','Both',t.merchant+' ('+t.memo+')','','']);
+      payRows.push([b.prop.abbr,pd,cg,t.merchant,'',pas,'Both',t.merchant+' ('+t.memo+')','','']);
+      nPay++;payC+=pa;return;}
+    var issue='';
+    if(b.prop&&t.amountC>0&&t.date&&t.bill&&t.bill.s==='open'&&holdBills){held++;heldC+=t.amountC;bcAdd(t,'held');return;}
+    if(!b.prop)issue='Unknown property for Ramp Location "'+(t.loc||'')+'"';
+    else if(t.amountC===null)issue='Amount could not be read';
+    else if(t.amountC===0)issue='Zero amount';
+    else if(!t.date)issue='Date could not be read';
+    else if(!t.code)issue=(ledger.files.length&&useLedger?'No GL in Ramp and no ledger history for this merchant':'Missing Accounting Category Code');
+    if(issue){bcAdd(t,'flagged');flagged.push([fmtDate(t.date),t.amountC===null?t.rawAmt:plain(t.amountC),t.merchant,t.loc,t.ext,issue]);
+      var ok2=t.amountC!==null&&t.amountC!==0, ab2=ok2?plain(Math.abs(t.amountC)):'', rf=ok2&&t.amountC<0, noCode=!t.code, d2=fmtDate(t.date), st=noCode?'MISSING GL':issue;
+      review.push({miss:true,glMiss:noCode,cells:[b.prop?b.prop.abbr:'',d2,noCode?'MISSING':t.code,t.merchant,rf?'':ab2,rf?ab2:'','Both',t.merchant,'','',st]});
+      review.push({miss:true,glMiss:false,cells:[b.prop?b.prop.abbr:'',d2,b.prop?b.prop.gl:'',t.merchant,rf?ab2:'',rf?'':ab2,'Both',t.merchant,'','',st]});
+      return;}
+    var abs=Math.abs(t.amountC), a=plain(abs), refund=t.amountC<0, d=fmtDate(t.date);
+    if(refund)refunds++;
+    bcAdd(t,'import');
+    rows.push([b.prop.abbr,d,t.code,t.merchant,refund?'':a,refund?a:'','Both',t.merchant,'','']);
+    rows.push([b.prop.abbr,d,b.prop.gl,t.merchant,refund?a:'',refund?'':a,'Both',t.merchant,'','']);
+    var stt=t.auto?'GL from ledger ('+t.auto.conf+')':'OK';
+    if(t.auto){nAuto[t.auto.conf]++;autos.push([d,a,t.merchant,t.code,acct(t.code),t.auto.conf,t.auto.why,t.memo||'']);}
+    review.push({miss:false,glMiss:false,cells:rows[rows.length-2].concat([stt])});
+    review.push({miss:false,glMiss:false,cells:rows[rows.length-1].concat([stt])});
+    deb+=abs;cre+=abs;count++;
+  });
+  var ord={'b-open':0,'b-billed':1,'':2}; bc.sort(function(a,c){return ord[a.cls]-ord[c.cls];});
+  return {rows:rows,review:review,flagged:flagged,deb:deb,cre:cre,count:count,refunds:refunds,bc:bc,held:held,heldC:heldC,nOpen:nOpen,nBilled:nBilled,nNone:nNone,autos:autos,nAuto:nAuto,nPay:nPay,payC:payC,payRows:payRows};
+}
+function fileNames(b){
+  var code=b.prop?b.prop.abbr:'XX', ym=b.ym||'YYYYMM';
+  return {imp:'Ramp_CC_Import_'+code+'_'+ym+'.csv',flag:'Ramp_CC_FLAGGED_'+code+'_'+ym+'.csv',bill:'Ramp_CC_BILLCHECK_'+code+'_'+ym+'.csv',pay:'Ramp_CC_PAYMENTS_'+code+'_'+ym+'.csv'};
+}
+function status(b,r){
+  if(!b.prop)return {t:'Choose a property',c:'warn'};
+  if(r.flagged.length)return {t:'On hold: '+r.flagged.length+' not ready',c:'warn'};
+  if(!r.rows.length)return {t:'Nothing to import',c:'warn'};
+  if(r.deb!==r.cre)return {t:'Out of balance',c:'bad'};
+  return {t:'Ready to import',c:'ok'};
+}
+
+/* ---------- rendering ---------- */
+function codingTable(b){
+  var g={}; b.txs.forEach(function(t){var k=t.mkey; if(!g[k])g[k]={m:t.merchant,cat:t.category,n:0,sum:0,k:k}; g[k].n++; g[k].sum+=t.amountC||0;});
+  var list=Object.keys(g).map(function(k){return g[k];}).sort(function(a,b){return Math.abs(b.sum)-Math.abs(a.sum)||a.m.localeCompare(b.m);});
+  var left=list.filter(function(x){return !gl[x.k];}).length;
+  var h='<div><h3>Code merchants ('+left+' of '+list.length+' still need a GL)</h3><div class="tw"><table><thead><tr><th>Merchant</th><th>Ramp category</th><th class="n">Charges</th><th class="n">Total</th><th>GL account</th></tr></thead><tbody>';
+  list.forEach(function(x){
+    h+='<tr><td class="wrap">'+esc(x.m)+'</td><td>'+esc(x.cat)+'</td><td class="n">'+x.n+'</td><td class="n">'+money(x.sum)+'</td><td><input class="gl'+(gl[x.k]?'':' empty')+'" data-act="gl" data-mk="'+esc(x.k)+'" data-fid="'+esc(b.key+'#'+x.k)+'" value="'+esc(gl[x.k]||'')+'" placeholder="e.g. 6340-0" aria-label="GL account for '+esc(x.m)+'" autocomplete="off"></td></tr>';
+  });
+  return h+'</tbody></table></div><p class="ex" style="margin-top:6px">A code you enter applies to that merchant on every property and is saved in this browser.</p></div>';
+}
+function nameCell(v){var n=acct(v);return n?'<td>'+esc(n)+'</td>':'<td class="nogl">Not in chart of accounts</td>';}
+function previewTable(rows){
+  var h='<div class="tw scroll"><table><thead><tr>'+IMPORT_HEAD.map(function(x,i){return '<th'+(i===4||i===5?' class="n"':'')+'>'+esc(x)+'</th>'+(i===2?'<th>GL Account Name</th>':'');}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){h+='<tr>'+r.map(function(v,i){return '<td'+(i===4||i===5?' class="n"':'')+'>'+esc(v)+'</td>'+(i===2?nameCell(v):'');}).join('')+'</tr>';});
+  return h+'</tbody></table></div>';
+}
+function reviewTable(rev){
+  var h='<p class="legend"><span><i style="background:var(--warn-bg);border:1px solid var(--line)"></i>No GL in Ramp, left out of the import file</span><span><i style="background:var(--bad-bg);border:1px solid var(--line)"></i>The missing GL</span></p><div class="tw scroll"><table><thead><tr>'+IMPORT_HEAD.concat(['Status']).map(function(x,i){return '<th'+(i===4||i===5?' class="n"':'')+'>'+esc(x)+'</th>'+(i===2?'<th>GL Account Name</th>':'');}).join('')+'</tr></thead><tbody>';
+  rev.forEach(function(r){h+='<tr'+(r.miss?' class="miss"':'')+'>'+r.cells.map(function(v,i){var c=(i===4||i===5?'n ':'')+(i===2&&r.glMiss?'missgl ':'')+(i===10?'st ':'');return '<td'+(c?' class="'+c.trim()+'"':'')+'>'+esc(v)+'</td>'+(i===2?(v?nameCell(v):'<td></td>'):'');}).join('')+'</tr>';});
+  return h+'</tbody></table></div>';
+}
+function flaggedTable(rows){
+  var h='<div class="tw scroll"><table><thead><tr>'+FLAG_HEAD.map(function(x,i){return '<th'+(i===1?' class="n"':'')+'>'+esc(x)+'</th>';}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r){h+='<tr>'+r.map(function(v,i){return '<td'+(i===1?' class="n"':'')+'>'+esc(v)+'</td>';}).join('')+'</tr>';});
+  return h+'</tbody></table></div>';
+}
+function isOpen(b){return openPrev[b.key]===undefined?b.res.flagged.length>0:openPrev[b.key];}
+function cardHtml(b){
+  var r=b.res, s=status(b,r), nm=fileNames(b);
+  var opts='<option value="">Choose a property</option>'+PROPS.map(function(p){return '<option value="'+p.abbr+'"'+(b.prop&&b.prop.abbr===p.abbr?' selected':'')+'>'+p.abbr+' · '+esc(p.name)+' · '+esc(p.st)+'</option>';}).join('');
+  var h='<article class="card" data-key="'+esc(b.key)+'"><div class="card-h"><div><h2>'+esc(b.label)+'</h2>'+(b.prop?'<p class="addr">'+esc(b.prop.addr)+'</p>':'')+'<p class="src">'+esc(b.src.name)+(b.pdf?' · PDF statement':' · Ramp CSV'+(b.locRaw?' · Ramp Location: '+b.locRaw:''))+'</p></div><span class="pill '+s.c+'">'+esc(s.t)+'</span></div>';
+  h+='<div class="fields"><label class="f">Property<select data-act="prop" data-key="'+esc(b.key)+'">'+opts+'</select></label>'+
+     '<label class="f">Address<div class="fix" style="font-family:var(--font)">'+(b.prop?esc(b.prop.addr):'Not set')+'</div></label>'+
+     '<label class="f">CC Payable GL (credit line)<div class="fix">'+(b.prop?esc(b.prop.gl):'Not set')+'</div></label>'+
+     '<label class="f">Month in file names (YYYYMM)<input data-act="ym" data-key="'+esc(b.key)+'" value="'+esc(b.ym)+'" maxlength="6" inputmode="numeric"></label></div>';
+  if(b.inferNote)h+='<p class="note warn">'+esc(b.inferNote)+' Confirm it is '+esc(b.prop.name)+'.</p>';
+  h+='<dl class="stats"><div><dt>Transactions</dt><dd>'+r.count+'</dd></div><div><dt>Import rows</dt><dd>'+r.rows.length+'</dd></div><div><dt>Total debit</dt><dd>'+money(r.deb)+'</dd></div><div><dt>Total credit</dt><dd>'+money(r.cre)+'</dd></div><div><dt>Flagged</dt><dd>'+r.flagged.length+'</dd></div>'+(r.bc.length?'<div><dt>Bills to close</dt><dd>'+r.held+'</dd></div>':'')+'</dl>';
+  if(r.nPay)h+='<p class="note">'+r.nPay+' card payment'+(r.nPay>1?'s':'')+' from the bank ('+money(r.payC)+') '+(r.nPay>1?'are':'is')+' NOT in the import file. '+(r.nPay>1?'They are':'It is')+' on the Card payments tab: debit the CC payable GL, credit the property operating GL. The date is the Ramp transaction date, which matches how your ledger booked past payments.</p>';
+  if(r.autos.length)h+='<p class="note">'+r.autos.length+' transaction'+(r.autos.length>1?'s':'')+' had no GL in Ramp. The GL was taken from your General Ledger history ('+r.nAuto.High+' high, '+r.nAuto.Medium+' medium, '+r.nAuto.Low+' low confidence). See the GL assigned tab.</p>';
+  if(r.held)h+='<p class="note warn">'+r.held+' Ramp payment'+(r.held>1?'s':'')+' ('+money(r.heldC)+') match an open bill in AP Aging and '+(r.held>1?'are':'is')+' left out of the import. Close '+(r.held>1?'those bills':'that bill')+' in ResMan against this card instead of booking a second expense. See the Bill check tab.</p>';
+  if(r.nOpen>r.held)h+='<p class="note bad">'+(r.nOpen-r.held)+' payment'+(r.nOpen-r.held>1?'s match':' matches')+' an open bill but '+(r.nOpen-r.held>1?'are':'is')+' still in the import, which doubles the expense.</p>';
+  if(r.nBilled)h+='<p class="note">'+r.nBilled+' payment'+(r.nBilled>1?'s match':' matches')+' a bill already entered in Invoice Detail. Check '+(r.nBilled>1?'they are':'it is')+' not also paid another way.</p>';
+  if(r.rows.length)h+='<p class="note '+(r.deb===r.cre?'':'bad')+'">'+(r.deb===r.cre?'Balanced: total debit equals total credit at '+money(r.deb)+'.':'Debit and credit differ by '+money(Math.abs(r.deb-r.cre))+'. Do not import.')+'</p>';
+  var sk=Object.keys(b.skipped).filter(function(k){return b.skipped[k];}).map(function(k){return b.skipped[k]+' × '+k;});
+  if(sk.length)h+='<p class="note">Skipped, not transactions: '+esc(sk.join(', '))+'.</p>';
+  if(r.refunds)h+='<p class="note">'+r.refunds+' refund'+(r.refunds>1?'s':'')+' (negative amounts) are written with the sides reversed: credit to the expense, debit to the CC payable. The SOP does not cover this, so check them in the preview.</p>';
+  if(b.pdf&&b.src.meta.spent!==null){var net=b.txs.reduce(function(a,t){return a+(t.amountC||0);},0);
+    h+='<p class="note'+(net===b.src.meta.spent?'':' bad')+'">'+(net===b.src.meta.spent?'Statement check: the '+b.txs.length+' charges add up to the statement\'s Amount Spent of '+money(b.src.meta.spent)+'.':'Statement check failed: charges total '+money(net)+' but the statement says Amount Spent is '+money(b.src.meta.spent)+'. A row may have been misread.')+'</p>';
+    var st=b.src.meta.start,en=b.src.meta.end,out=b.txs.filter(function(t){return t.date&&((st&&t.date<st)||(en&&t.date>en));}).length;
+    if(out)h+='<p class="note">'+out+' charge'+(out>1?'s are':' is')+' dated outside the statement period ('+fmtDate(st)+' to '+fmtDate(en)+'). Make sure they land in the right posting period in ResMan.</p>';}
+  b.notes.forEach(function(n){h+='<p class="note warn">'+esc(n)+'</p>';});
+  var bad={};r.rows.forEach(function(x){var c=String(x[2]||'').trim();if(c&&!COA[c])bad[c]=1;});
+  var badl=Object.keys(bad); if(badl.length)h+='<p class="note bad">'+badl.length+' GL code'+(badl.length>1?'s are':' is')+' not in your Chart of Accounts: '+esc(badl.join(', '))+'. ResMan will reject these lines, so fix the code in Ramp.</p>';
+  if(b.pdf)h+=codingTable(b);
+  if(r.rows.length||r.flagged.length||r.bc.length||r.nPay){
+    var tab=tabSel[b.key]||(r.rows.length?'import':(r.flagged.length?'flagged':(r.nPay?'pay':'bills')));
+    var tb=function(id,label,n,warn){return '<button class="tab" role="tab" type="button" data-act="tab" data-key="'+esc(b.key)+'" data-tab="'+id+'" aria-selected="'+(tab===id)+'">'+label+'<span class="cnt'+(warn&&n?' warn':'')+'">'+n+'</span></button>';};
+    h+='<div><div class="tabs" role="tablist">'+tb('import','Import rows',r.rows.length,false)+tb('flagged','Flagged transactions',r.flagged.length,true)+(r.bc.length?tb('bills','Bill check',r.held+r.nBilled,true):'')+(r.autos.length?tb('auto','GL assigned',r.autos.length,false):'')+(r.nPay?tb('pay','Card payments',r.nPay,false):'')+'</div>';
+    if(tab==='import')h+=r.rows.length?'<p class="ex" style="margin-bottom:8px">These rows are what the import CSV contains. Flagged transactions are not in it.</p>'+previewTable(r.rows):'<p class="note">No importable rows yet. Every transaction in this statement is flagged.</p>';
+    else if(tab==='pay')h+='<p class="ex" style="margin-bottom:8px">Transfers from the bank that paid the card. Import them separately from the transactions.</p>'+previewTable(r.payRows);
+    else if(tab==='auto')h+=r.autos.length?'<p class="ex" style="margin-bottom:8px">These transactions had no GL in Ramp. The app took the GL your General Ledger history uses for the same vendor. Check the Low ones.</p>'+autoTable(r.autos):'<p class="note">No GL was filled from the ledger.</p>';
+    else if(tab==='bills')h+=r.bc.length?'<p class="ex" style="margin-bottom:8px">Every Ramp payment checked against AP Aging (open bills) and Invoice Detail (bills already entered), by vendor name and exact amount.</p>'+billTable(r.bc):'<p class="note">No bill reports loaded for this property.</p>';
+    else h+=r.flagged.length?flaggedTable(r.flagged)+(b.pdf?'':'<p class="ex" style="margin-top:6px">Per the SOP: assign the codes in Ramp, download the statement again, and run it through here again.</p>'):'<p class="note">Nothing flagged. Every transaction has a GL code.</p>';
+    h+='</div>';
+  }
+  var memo='Ramp CC — '+(b.prop?b.prop.name:'Property')+' — '+(b.ym.length===6?ymLabel(b.ym):'');
+  h+='<div class="foot"><div class="names">Journal description for ResMan: '+esc(memo)+'<br>'+esc(nm.imp)+(r.flagged.length?' · '+esc(nm.flag):'')+(r.bc.length?' · '+esc(nm.bill):'')+'</div>'+
+     '<button class="btn" data-act="copy" data-key="'+esc(b.key)+'" type="button">Copy import CSV</button>'+
+     '<button class="btn primary" data-act="dlxlsx" data-key="'+esc(b.key)+'" type="button">Download workbook (Import + Flagged tabs, .xlsx)</button>'+
+     (r.nPay?'<button class="btn" data-act="dlpay" data-key="'+esc(b.key)+'" type="button">Download card payments CSV</button>':'')+
+     (r.bc.length?'<button class="btn" data-act="dlbill" data-key="'+esc(b.key)+'" type="button">Download bill check CSV</button>':'')+
+     (r.flagged.length?'<button class="btn" data-act="dlflag" data-key="'+esc(b.key)+'" type="button">Download flagged CSV</button>':'')+
+     '<button class="btn" data-act="dlimp" data-key="'+esc(b.key)+'" type="button"'+(r.rows.length?'':' disabled')+'>'+(r.flagged.length?'Download partial import CSV':'Download import CSV')+'</button> <button class="btn" data-act="dlimpx" data-key="'+esc(b.key)+'" type="button"'+(r.rows.length?'':' disabled')+'>Download import as single-sheet Excel (.xlsx)</button></div>';
+  return h+'</article>';
+}
+var batches=[];
+window.__ramp={rm:function(b,p){return rmRows(b,p?b.res.payRows:null);},get bills(){return bills;},get batches(){return batches;}};
+function compute(){
+  batches=[]; resetBillUse();
+  sources.forEach(function(s){deriveBatches(s).forEach(function(b){batches.push(b);});});
+  var rh=rampHistory();
+  batches.forEach(function(b){if(!b.prop)return; b.txs.forEach(function(t){if(t.isPay)return; var sg=ledgerSuggest(b.prop.abbr,t,rh); if(sg&&confOk(sg.conf)){t.code=sg.gl;t.auto=sg;}});});
+  batches.forEach(function(b){var ts=b.txs.slice().sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:0;}); ts.forEach(function(t){t.bill=b.prop&&!t.isPay?matchBill(b.prop.abbr,t):null;});});
+  batches.forEach(function(b){b.res=build(b);});
+}
+function render(){
+  compute();
+  $('clear').hidden=!sources.length;
+  var list=$('list'), bar=$('bar'), by={};
+  batches.forEach(function(b){var k=b.prop?b.prop.abbr:'none';(by[k]=by[k]||[]).push(b);});
+  if(pFilter!=='all'&&pFilter!=='none'&&!propByAbbr(pFilter))pFilter='all';
+  if(pFilter==='none'&&!by.none)pFilter='all';
+  var popts='<option value="all"'+(pFilter==='all'?' selected':'')+'>All properties'+(batches.length?' ('+batches.length+' '+(batches.length===1?'statement':'statements')+')':'')+'</option>'+
+    PROPS.map(function(p){var l=by[p.abbr],m=l?l.reduce(function(a,b){return a+b.res.flagged.length;},0):0;
+      return '<option value="'+p.abbr+'"'+(pFilter===p.abbr?' selected':'')+'>'+p.abbr+' · '+esc(p.name)+' · '+esc(p.st)+' · '+(!l?'no statement yet':(m?m+' flagged':'ready'))+'</option>';}).join('')+
+    (by.none?'<option value="none"'+(pFilter==='none'?' selected':'')+'>Unassigned · choose a property</option>':'');
+  var h='<div class="bar"><label class="pick" for="pfilter">Property<select id="pfilter">'+popts+'</select></label>';
+  if(batches.length){
+    var tx=0,rows=0,hold=0,ready=0; batches.forEach(function(b){tx+=b.res.count;rows+=b.res.rows.length;var st=status(b,b.res); if(st.c==='ok')ready++; else hold++;});
+    h+='<div class="chips"><div class="chip"><b>'+batches.length+'</b><span>'+(batches.length===1?'statement':'statements')+'</span></div><div class="chip"><b>'+tx+'</b><span>transactions</span></div><div class="chip"><b>'+rows+'</b><span>import rows</span></div><div class="chip"><b>'+ready+'</b><span>ready</span></div><div class="chip"><b>'+hold+'</b><span>on hold</span></div></div>'+
+      '<div class="row"><button class="btn" id="xlsx" type="button">Download workbook with Missing tabs (.xlsx)</button><button class="btn primary" id="zip" type="button"'+(ready||batches.some(function(b){return b.res.flagged.length;})?'':' disabled')+'>Download ready files (.zip)</button></div>';
+  }
+  bar.innerHTML=h+'</div>'+billPanel()+ledgerPanel();
+  var shown=batches.filter(function(b){return pFilter==='all'||(b.prop?b.prop.abbr:'none')===pFilter;});
+  if(!batches.length)list.innerHTML='<div class="empty-state">Each statement you add becomes a card here with its balance check, any uncoded charges, and the two download files named the way the SOP asks.</div>';
+  else if(!shown.length)list.innerHTML='<div class="empty-state">No statement has been added for '+esc((propByAbbr(pFilter)||{name:'this property'}).name)+' yet. Choose All properties to see the ones you added.</div>';
+  else list.innerHTML='<div style="display:flex;flex-direction:column;gap:16px">'+shown.map(cardHtml).join('')+'</div>';
+  var st=function(k){var l=bills.files.filter(function(f){return f.kind===k;}); return l.length?l.length+' report'+(l.length>1?'s':'')+' loaded: '+l.map(function(f){return f.abbr;}).join(', '):'Not added yet';};
+  $('statG').textContent=ledger.files.length?ledger.files.length+' ledger'+(ledger.files.length>1?'s':'')+' loaded: '+ledger.files.map(function(f){return f.abbr;}).join(', '):'Not added yet';
+  $('statA').textContent=st('aging'); $('statB').textContent=st('inv');
+  $('statR').textContent=sources.length?sources.length+' statement'+(sources.length>1?'s':'')+' loaded':'No Ramp statements yet';
+  var n=Object.keys(gl).length; $('savedcount').textContent=n+' merchant code'+(n===1?'':'s')+' saved in this browser';
+}
+function renderKeepFocus(){
+  var a=document.activeElement, fid=a&&a.getAttribute&&a.getAttribute('data-fid'), pos=a&&a.selectionStart;
+  render();
+  if(fid){var els=document.querySelectorAll('input[data-fid]'); for(var i=0;i<els.length;i++)if(els[i].getAttribute('data-fid')===fid){els[i].focus();try{els[i].setSelectionRange(pos,pos);}catch(e){}break;}}
+}
+
+/* ---------- actions ---------- */
+function batchByKey(k){return batches.filter(function(b){return b.key===k;})[0];}
+function save(name,data){
+  if(!dl){
+    try{var bl=data instanceof Blob?data:new Blob([data],{type:'text/csv;charset=utf-8'});var u=URL.createObjectURL(bl),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(u);},4000);toast('Saved '+name);}
+    catch(e){toast('Could not save the file here. Use Copy import CSV instead.');}
+    return Promise.resolve();}
+  return dl.save({filename:name,data:data}).then(function(){toast('Saved '+name);}).catch(function(e){
+    if(e&&e.code==='declined')return; toast('Could not save the file here. Use Copy import CSV instead.');});
+}
+function copyText(t){
+  var done=function(){toast('Copied to the clipboard');};
+  var fallback=function(){var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){toast('Copy was blocked. Select the text in the preview and copy it.');}document.body.removeChild(ta);};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,fallback); else fallback();
+}
+var RM_HEAD8=['Date','GL Account Number','Description','Debit (Enter as positive)','Credit (Enter as positive)','Accounting Basis','Accounting Book','Department'];
+function rmHead(){return layout==='legacy'?IMPORT_HEAD:RM_HEAD8;}
+function propCode(ab){var m={};codeTxt.split(/[,;\n]/).forEach(function(x){var p=x.split('=');if(p.length===2&&p[0].trim())m[p[0].trim().toUpperCase()]=p[1].trim();});return m[String(ab).toUpperCase()]||ab;}
+function rmRows(b,rr){rr=rr||b.res.rows;
+  if(layout==='legacy')return rr.map(function(r){return [propCode(r[0]),r[1],r[2],r[3],r[4],r[5],basisSel,r[7],'',''];});
+  var key=function(d){var m=/^(\d\d)\/(\d\d)\/(\d{4})$/.exec(d);return m?m[3]+m[1]+m[2]:'';};
+  var pd=/^\d\d\/\d\d\/\d{4}$/.test(postDate)?postDate:'';
+  if(!pd&&b.ym&&/^\d{6}$/.test(String(b.ym))){var yy=+String(b.ym).slice(0,4),mm=+String(b.ym).slice(4);var ld=new Date(Date.UTC(yy,mm,0)).getUTCDate();pd=('0'+mm).slice(-2)+'/'+('0'+ld).slice(-2)+'/'+yy;}
+  if(!pd){var mx='';rr.forEach(function(r){if(key(r[1])>key(mx))mx=r[1];});pd=mx;}
+  return rr.map(function(r){var d=r[1],desc=r[3];if(d&&d!==pd&&desc.indexOf(d.slice(0,5))!==0)desc=d.slice(0,5)+' '+desc;return [pd,r[2],desc,r[4],r[5],basisSel,'',''];});}
+function payCsv(b){return toCSV(rmHead(),rmRows(b,b.res.payRows));}
+function impCsv(b){return toCSV(rmHead(),rmRows(b));}
+function billCsv(b){return toCSV(BILL_HEAD,b.res.bc.map(function(x){return x.cells;}));}
+function flagCsv(b){return toCSV(FLAG_HEAD,b.res.flagged);}
+
+document.addEventListener('click',function(e){
+  var t=e.target.closest('[data-act],#xlsx,#zip,#pick,#pickA,#pickB,#pickG,#example,#clear,#applypaste'); if(!t)return;
+  var act=t.getAttribute('data-act'), id=t.id;
+  if(id==='pick'){$('file').click();return;}
+  if(id==='pickA'){$('fileA').click();return;}
+  if(id==='pickB'){$('fileB').click();return;}
+  if(id==='pickG'){$('fileG').click();return;}
+  if(id==='example'){loadExample();return;}
+  if(id==='clear'){ledger={by:{},files:[]};bills={aging:{},inv:{},files:[]};sources=[];over={};openPrev={};tabSel={};pFilter='all';render();return;}
+  if(id==='applypaste'){applyPaste();return;}
+  if(id==='zip'){makeZip();return;}
+  if(id==='xlsx'){makeXlsx();return;}
+  var b=batchByKey(t.getAttribute('data-key')); if(!b)return;
+  if(act==='dlimp')save(fileNames(b).imp,impCsv(b));
+  else if(act==='dlimpx')makeImportXlsx(b);
+  else if(act==='dlpay')save(fileNames(b).pay,payCsv(b));
+  else if(act==='dlxlsx')makeXlsx(b);
+  else if(act==='dlbill')save(fileNames(b).bill,billCsv(b));
+  else if(act==='dlflag')save(fileNames(b).flag,flagCsv(b));
+  else if(act==='copy')copyText(impCsv(b));
+  else if(act==='tab'){tabSel[b.key]=t.getAttribute('data-tab');render();}
+});
+document.addEventListener('input',function(e){
+  var t=e.target; if(t.getAttribute('data-act')==='gl'){
+    var k=t.getAttribute('data-mk'), v=t.value.trim();
+    if(v)gl[k]=v; else delete gl[k]; saveGl(); renderKeepFocus();
+  }
+});
+document.addEventListener('change',function(e){
+  var t=e.target, act=t.getAttribute('data-act');
+  if(act==='prop'){var k=t.getAttribute('data-key');over[k]=over[k]||{};over[k].abbr=t.value||null;render();}
+  else if(act==='ym'){var k2=t.getAttribute('data-key'),v=t.value.trim();if(/^\d{6}$/.test(v)){over[k2]=over[k2]||{};over[k2].ym=v;}else toast('Use six digits, like 202607.');render();}
+  else if(t.id==='holdbills'){holdBills=t.checked;render();}
+  else if(t.id==='incpay'){includePay=t.checked;render();}
+  else if(t.id==='basis'){basisSel=t.value;render();}
+  else if(t.id==='postdate'){postDate=t.value.trim();render();}
+  else if(t.id==='layout'){layout=t.value;render();}
+  else if(t.id==='codes'){codeTxt=t.value;render();}
+  else if(t.id==='useledger'){useLedger=t.checked;render();}
+  else if(t.id==='glmin'){glMin=t.value;render();}
+  else if(t.id==='pfilter'){pFilter=t.value;render();var pf=$('pfilter');if(pf)pf.focus();}
+  else if(t.id==='datefmt'){dateFmt=t.value;try{localStorage.setItem('ramp_datefmt',dateFmt);}catch(x){}render();}
+  else if(t.id==='file'){handleFiles(t.files,'ramp');t.value='';}
+  else if(t.id==='fileA'){handleFiles(t.files,'aging');t.value='';}
+  else if(t.id==='fileB'){handleFiles(t.files,'inv');t.value='';}
+  else if(t.id==='fileG'){handleFiles(t.files,'gl');t.value='';}
+});
+document.addEventListener('toggle',function(e){
+  var t=e.target; if(t.getAttribute&&t.getAttribute('data-prev')){
+    var k=t.getAttribute('data-prev'); openPrev[k]=t.open;
+    if(t.open){var b=batchByKey(k); if(b)t.lastElementChild.innerHTML=reviewTable(b.res.review);}
+  }
+},true);
+function applyPaste(){
+  var n=0; $('paste').value.split(/\r?\n/).forEach(function(line){
+    var m=line.split(/\t|,/); if(m.length<2)return; var g=m.pop().trim(), name=m.join(',').trim(); if(name&&g){gl[mkey(name)]=g;n++;}});
+  saveGl(); $('paste').value=''; toast(n?'Saved '+n+' code'+(n>1?'s':''):'No lines had both a merchant and a GL'); render();
+}
+function makeZip(){
+  if(typeof JSZip==='undefined'){toast('The zip library did not load. Download the files one at a time.');return;}
+  var z=new JSZip(), n=0;
+  batches.forEach(function(b){var nm=fileNames(b);
+    if(status(b,b.res).c==='ok'){z.file(nm.imp,impCsv(b));n++;}
+    if(b.res.flagged.length){z.file(nm.flag,flagCsv(b));n++;}
+    if(b.res.bc.length){z.file(nm.bill,billCsv(b));n++;}
+    if(b.res.nPay){z.file(nm.pay,payCsv(b));n++;}});
+  if(!n){toast('Nothing is ready yet.');return;}
+  z.generateAsync({type:'blob'}).then(function(blob){return save('Ramp_CC_Imports.zip',blob);});
+}
+
+function makeImportXlsx(b){
+  if(typeof ExcelJS==='undefined'){toast('The spreadsheet library did not load.');return;}
+  var wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Import');
+  ws.addRow(rmHead());
+  var L=layout==='legacy', o=L?1:0, dm=function(v){var m=/^(\d\d)\/(\d\d)\/(\d{4})$/.exec(v);return m?new Date(Date.UTC(+m[3],+m[1]-1,+m[2])):v;}, nn=function(v){return v===''?null:parseFloat(v);};
+  rmRows(b).forEach(function(r){ws.addRow(L?[r[0],dm(r[1]),r[2],r[3],nn(r[4]),nn(r[5]),r[6],r[7],null,null]:[dm(r[0]),r[1],r[2],nn(r[3]),nn(r[4]),r[5],null,null]);});
+  ws.getColumn(2+o).numFmt='@';
+  ws.eachRow(function(row,n){row.eachCell({includeEmpty:true},function(c,i){c.font={name:'Arial',size:10,bold:n===1};if(n>1&&i===1+o)c.numFmt='mm/dd/yyyy';if(n>1&&(i===4+o||i===5+o))c.numFmt='0.00';});});
+  (L?[14,12,18,34,12,12,14,30,12,12]:[12,18,34,16,16,16,16,12]).forEach(function(w,i){ws.getColumn(i+1).width=w;});
+  wb.xlsx.writeBuffer().then(function(buf){return save(fileNames(b).imp.replace(/\.csv$/,'.xlsx'),new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));},function(){toast('Could not build the file.');});
+}
+function makeXlsx(only){
+  var list=only?[only]:batches;
+  if(typeof ExcelJS==='undefined'){toast('The workbook library did not load. Use the CSV downloads.');return;}
+  var wb=new ExcelJS.Workbook(), F='Arial', yel='FFFFF2A8', red='FFFF8A80', dk='FF1F4E46';
+  var sm=wb.addWorksheet('Summary');
+  sm.addRow(['Ramp CC import review']).font={name:F,bold:true,size:14};
+  sm.addRow(['Each property has an Import tab (coded transactions only, ResMan layout) and a Missing tab (transactions with no Accounting Category Code in Ramp). Code the missing ones in Ramp, download the statement again, and rebuild. Do not upload this workbook to ResMan. Use the import CSV or the single-sheet Import file instead.']).font={name:F,italic:true,size:10};
+  sm.addRow([]);
+  var hr=sm.addRow(['Property','Abbr.','Address','CC Payable GL','Coded transactions','Missing GL transactions','Total debit','Total credit','Balanced?','Status','Bills to close','Bills already entered','No bill found','GL filled from ledger']);
+  hr.eachCell(function(c){c.font={name:F,bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:dk}};});
+  var used={};
+  list.forEach(function(b){
+    var r=b.res, ab=b.prop?b.prop.abbr:'XX', nm=ab; if(used[nm]){used[nm]++;nm=ab+used[nm];}else used[nm]=1;
+    var sr=sm.addRow([b.prop?b.prop.name:b.label,ab,b.prop?b.prop.addr:'',b.prop?b.prop.gl:'',r.count,r.flagged.length,r.deb/100,r.cre/100,r.deb===r.cre?'Yes':'NO',status(b,r).t,r.bc.length?r.held:'',r.bc.length?r.nBilled:'',r.bc.length?r.nNone:'',r.autos.length]);
+    sr.eachCell(function(c){c.font={name:F,size:10};}); sr.getCell(7).numFmt='$#,##0.00'; sr.getCell(8).numFmt='$#,##0.00';
+    var fillOf=function(c){return {type:'pattern',pattern:'solid',fgColor:{argb:c}};};
+    var head=function(ws,cols){var h=ws.addRow(cols);h.eachCell(function(c){c.font={name:F,bold:true,color:{argb:'FFFFFFFF'}};c.fill=fillOf(dk);});};
+    if(r.rows.length){
+      var wi=wb.addWorksheet(only?'Import':nm+' Import',{views:[{state:'frozen',ySplit:1}]});
+      wi.properties.tabColor={argb:'FF2E8B57'};
+      head(wi,IMPORT_HEAD);
+      r.rows.forEach(function(x){
+        var row=wi.addRow(x.map(function(v,i){return (i===4||i===5)&&v!==''?parseFloat(v):(v===''?null:v);}));
+        row.eachCell({includeEmpty:true},function(c,i){c.font={name:F,size:10};if(i===5||i===6)c.numFmt='#,##0.00';});
+      });
+      [12,12,16,34,12,12,12,34,12,12].forEach(function(w,i){wi.getColumn(i+1).width=w;});
+    }
+    if(r.autos.length){
+      var wau=wb.addWorksheet(only?'GL assigned':nm+' GL assigned',{views:[{state:'frozen',ySplit:1}]});
+      wau.properties.tabColor={argb:'FF3E9B5C'};
+      head(wau,AUTO_HEAD);
+      r.autos.forEach(function(x){var row=wau.addRow(x.map(function(v,i){return i===1?parseFloat(v):v;}));row.eachCell({includeEmpty:true},function(c,i){c.font={name:F,size:10};c.fill=fillOf('FFE3F3E6');if(i===2)c.numFmt='#,##0.00';if(i===7||i===8)c.alignment={wrapText:true,vertical:'top'};});});
+      [12,12,30,12,34,12,70,40].forEach(function(w,i){wau.getColumn(i+1).width=w;});
+    }
+    if(r.nPay){
+      var wpy=wb.addWorksheet(only?'Card payments':nm+' Payments',{views:[{state:'frozen',ySplit:1}]});
+      wpy.properties.tabColor={argb:'FFE0A030'};
+      head(wpy,IMPORT_HEAD);
+      r.payRows.forEach(function(x){var row=wpy.addRow(x.map(function(v,i){return (i===4||i===5)&&v!==''?parseFloat(v):v;}));row.eachCell({includeEmpty:true},function(c,i){c.font={name:F,size:10};if(i===5||i===6)c.numFmt='#,##0.00';});});
+      [12,12,18,24,12,12,16,40,14,14].forEach(function(w,i){wpy.getColumn(i+1).width=w;});
+    }
+    if(r.bc.length){
+      var wbill=wb.addWorksheet(only?'Bill check':nm+' Bills',{views:[{state:'frozen',ySplit:1}]});
+      wbill.properties.tabColor={argb:'FF5B8DEF'};
+      head(wbill,BILL_HEAD);
+      r.bc.forEach(function(x){
+        var row=wbill.addRow(x.cells.map(function(v,i){return (i===1||i===8)&&v!==''?parseFloat(v):v;}));
+        row.eachCell({includeEmpty:true},function(c,i){c.font={name:F,size:10};if(x.cls==='b-open')c.fill=fillOf(yel);else if(x.cls==='b-billed')c.fill=fillOf('FFDCE9F7');if(i===2||i===9)c.numFmt='#,##0.00';if(i===10)c.alignment={wrapText:true,vertical:'top'};});
+      });
+      [12,12,30,10,20,34,14,12,12,70].forEach(function(w,i){wbill.getColumn(i+1).width=w;});
+    }
+    if(r.flagged.length){
+      var wm=wb.addWorksheet(only?'Flagged':nm+' Missing',{views:[{state:'frozen',ySplit:1}]});
+      wm.properties.tabColor={argb:'FFF2C200'};
+      head(wm,FLAG_HEAD);
+      r.flagged.forEach(function(x){
+        var row=wm.addRow(x.map(function(v,i){return i===1&&v!==''&&!isNaN(parseFloat(v))?parseFloat(v):v;}));
+        row.eachCell({includeEmpty:true},function(c,i){c.font={name:F,size:10};c.fill=fillOf(yel);if(i===2)c.numFmt='#,##0.00';});
+        row.getCell(6).font={name:F,size:10,bold:true,color:{argb:'FF9C0006'}};
+      });
+      [12,12,38,18,38,34].forEach(function(w,i){wm.getColumn(i+1).width=w;});
+    }
+  });
+  [18,8,40,14,16,18,14,14,11,26,14,18,14,18].forEach(function(w,i){sm.getColumn(i+1).width=w;});
+  var apS=apSummary().filter(function(o){return !only||(only.prop&&o.p.abbr===only.prop.abbr);});
+  if(apS.length){
+    var wa=wb.addWorksheet('AP Aging'); wa.properties.tabColor={argb:'FF8B5CF6'};
+    var hh=wa.addRow(['Property','Abbr.','Open bills','Total balance','0-30 days','31-60 days','61-90 days','Over 90 days','Credits (count)','Credits (amount)']);
+    hh.eachCell(function(c){c.font={name:F,bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:dk}};});
+    apS.forEach(function(o){var rr=wa.addRow([o.p.name,o.p.abbr,o.n,o.bal/100,o.b30/100,o.b60/100,o.b90/100,o.b91/100,o.cr,o.crAmt/100]);rr.eachCell(function(c,i){c.font={name:F,size:10};if(i>=4&&i!==9)c.numFmt='$#,##0.00;[Red]-$#,##0.00';});});
+    [20,8,11,16,14,14,14,14,14,16].forEach(function(w,i){wa.getColumn(i+1).width=w;});
+  }
+  var ym=list.length?list[0].ym:'';
+  wb.xlsx.writeBuffer().then(function(buf){return save((only?'Ramp_CC_'+(only.prop?only.prop.abbr:'XX')+'_Import_Workbook':'Ramp_CC_Import_Workbook')+(ym?'_'+ym:'')+'.xlsx',new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));},function(){toast('Could not build the workbook.');});
+}
+
+/* ---------- loading files ---------- */
+function addCsv(name,text){
+  var rows=parseCSV(text); if(rows.length<2){toast(name+' has no data rows.');return;}
+  var headers=rows[0], src={id:++uid,name:name,kind:'csv',headers:headers,rows:rows.slice(1),map:detectMap(headers)};
+  var miss=['date','amount','merchant','code'].filter(function(k){return src.map[k]===undefined;});
+  if(miss.length)toast(name+': could not find the '+miss.join(', ')+' column. Check the header names.');
+  sources.push(src);
+}
+function handleFiles(fl,mode){
+  mode=mode||'ramp'; var before=bills.files.length, beforeL=ledger.files.length;
+  var jobs=Array.prototype.slice.call(fl).map(function(f){
+    var isPdf=/\.pdf$/i.test(f.name)||f.type==='application/pdf';
+    var isXz=/\.(xlsx|zip)$/i.test(f.name);
+    if(mode==='ramp'&&isXz){toast(f.name+' is a spreadsheet or zip. Add it in the AP Aging Detail or Invoice Detail box.');return Promise.resolve();}
+    if(mode!=='ramp'&&!isXz){toast(f.name+': this box takes .xlsx or .zip reports from ResMan.');return Promise.resolve();}
+    if(isPdf)return f.arrayBuffer().then(function(buf){return readPdf(buf,f.name);}).then(function(s){
+      if(!s.meta.txs.length)toast(f.name+': no transactions found. Is this a Ramp statement?'); else sources.push(s);},function(){toast(f.name+' could not be read as a PDF.');});
+    if(/\.csv$/i.test(f.name)||f.type==='text/csv')return f.text().then(function(t){addCsv(f.name,t);});
+    if(/\.(xlsx|zip)$/i.test(f.name)){
+      if(typeof ExcelJS==='undefined'||(/\.zip$/i.test(f.name)&&typeof JSZip==='undefined')){toast('The spreadsheet library did not load.');return Promise.resolve();}
+      var one=function(buf,nm){if(mode==='gl')return readLedger(buf,nm).then(function(r){if(!addLedger(r))toast(nm+': this is not a General Ledger report for a known property.');},function(){toast(nm+' could not be read.');});
+      return readBillReport(buf,nm).then(function(r){if(r&&!r.bad&&r.kind!==mode){toast(nm+' is '+(r.kind==='aging'?'an AP Aging Detail':'an Invoice Detail')+' report. Add it in the '+(r.kind==='aging'?'AP Aging Detail':'Invoice Detail')+' box.');return;} if(!addReport(r))toast(nm+': this is not an AP Aging Detail or Invoice Detail report for a known property.');},function(){toast(nm+' could not be read.');});};
+      if(/\.xlsx$/i.test(f.name))return f.arrayBuffer().then(function(buf){return one(buf,f.name);});
+      return f.arrayBuffer().then(function(buf){return JSZip.loadAsync(buf);}).then(function(z){
+        var js=[]; z.forEach(function(p,e){if(!e.dir&&/\.xlsx$/i.test(p)&&p.indexOf('__MACOSX')<0&&!/\/~\$/.test(p))js.push(e.async('arraybuffer').then(function(buf){return one(buf,p.split('/').pop());}));});
+        return Promise.all(js);},function(){toast(f.name+' could not be opened as a zip.');});
+    }
+    toast(f.name+' is not a CSV, PDF, XLSX or ZIP.'); return Promise.resolve();
+  });
+  Promise.all(jobs).then(function(){var n=bills.files.length-before; if(n>0)toast('Loaded '+n+' bill report'+(n>1?'s':'')+'. Every Ramp payment is now checked against your bills.'); if(ledger.files.length>beforeL)toast('General Ledger loaded. Blank GL codes are now filled from its history.'); render();});
+}
+function loadExample(){
+  var t=['Type,Transaction Date,Amount,Merchant Description,Accounting Category Code,Ramp Location,External ID',
+   'Payment,2026-02-10 09:12:00,4334.45,Chase Bank Payment,,RI354,pay-0001',
+   'Transaction,2026-02-11 14:03:22,87.53,The Home Depot,6340-0,RI354,tx-1001',
+   'Transaction,2026-02-12 10:41:09,912.51,"Lowe\'s, Inc.",6340-0,RI354,tx-1002',
+   'Transaction,2026-02-13 16:20:45,290.60,Leslie\'s Pool Supplies,6410-0,RI354,tx-1003',
+   'Transaction,2026-02-14 08:55:12,43.98,Chick-Fil-A,,RI354,tx-1004',
+   'Transaction,2026-02-15 12:00:00,-19.46,The Home Depot,6340-0,RI354,tx-1005',
+   'Transaction,2026-02-12 11:30:00,512.00,Reece HVAC,6330-0,IS401,tx-2001',
+   'Transaction,2026-02-16 13:15:30,64.99,Academy Sports + Outdoors,6500-0,IS401,tx-2002'].join('\n');
+  addCsv('2026-02-10-example-ramp-statement.csv',t); render(); toast('Example data loaded. Clear all when you are done.');
+}
+
+/* ---------- boot ---------- */
+(function(){
+  [['drop','ramp'],['dropA','aging'],['dropB','inv'],['dropG','gl']].forEach(function(z){var d=$(z[0]);
+    ['dragenter','dragover'].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.add('over');});});
+    ['dragleave','drop'].forEach(function(ev){d.addEventListener(ev,function(e){e.preventDefault();d.classList.remove('over');});});
+    d.addEventListener('drop',function(e){if(e.dataTransfer&&e.dataTransfer.files.length)handleFiles(e.dataTransfer.files,z[1]);});});
+  $('datefmt').value=dateFmt;
+  $('proptable').innerHTML='<thead><tr><th>Ramp Location</th><th>Address</th><th>Entity on statement</th><th class="n">Prop. Abbr.</th><th class="n">CC Payable GL</th><th class="n">Operating GL</th></tr></thead><tbody>'+PROPS.map(function(p){return '<tr><td>'+esc(p.name)+'</td><td>'+esc(p.addr)+'</td><td>'+esc(p.llc)+'</td><td class="n">'+p.abbr+'</td><td class="n">'+p.gl+'</td><td class="n">'+p.op+'</td></tr>';}).join('')+'</tbody>';
+  function coaRender(){var q=$('coaq').value.trim().toLowerCase(),k=Object.keys(COA),n=0,h='<thead><tr><th>Number</th><th>Name</th><th>Type</th></tr></thead><tbody>';
+    k.forEach(function(c){if(n>=60)return;var a=COA[c];if(!q||c.toLowerCase().indexOf(q)>-1||a[0].toLowerCase().indexOf(q)>-1){n++;h+='<tr><td class="mono">'+esc(c)+'</td><td>'+esc(a[0])+'</td><td>'+esc(a[1])+'</td></tr>';}});
+    $('coat').innerHTML=h+(n?'':'<tr><td colspan="3">No match</td></tr>')+'</tbody>';}
+  $('coaq').addEventListener('input',coaRender); coaRender();
+  render();
+  if(window.claude&&window.claude.use){window.claude.use('downloads').then(function(x){dl=x;},function(){dl=null;});}
+})();
+})();
+</script>
+</html>
